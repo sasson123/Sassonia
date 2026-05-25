@@ -1,29 +1,21 @@
-import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { ShoppingCart, CheckSquare, BookOpen, Home } from 'lucide-react'
+import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { ShoppingCart, CheckSquare, BookOpen } from 'lucide-react'
 import RecipesPage from './pages/RecipesPage'
 import RecipeDetailPage from './pages/RecipeDetailPage'
 import RecipeFormPage from './pages/RecipeFormPage'
 import ShoppingPage from './pages/ShoppingPage'
 import TasksPage from './pages/TasksPage'
 
+const NAV_LINKS = [
+  { to: '/recipes', icon: BookOpen, label: 'Recipes' },
+  { to: '/shopping', icon: ShoppingCart, label: 'Shopping' },
+  { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
+]
+
 function NavBar() {
-  const location = useLocation()
-  const hideNav = location.pathname.startsWith('/recipes/') && location.pathname !== '/recipes'
-
-  if (hideNav && location.pathname !== '/recipes/new') {
-    const isDetail = /^\/recipes\/\d+$/.test(location.pathname)
-    if (!isDetail) return null
-  }
-
-  const links = [
-    { to: '/recipes', icon: BookOpen, label: 'Recipes' },
-    { to: '/shopping', icon: ShoppingCart, label: 'Shopping' },
-    { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
-  ]
-
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 flex safe-bottom z-50">
-      {links.map(({ to, icon: Icon, label }) => (
+    <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 flex z-50">
+      {NAV_LINKS.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}
           to={to}

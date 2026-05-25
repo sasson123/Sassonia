@@ -2,8 +2,7 @@ import json
 import os
 import shutil
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -66,6 +65,23 @@ def recipe_to_dict(r: models.Recipe) -> dict:
 def list_recipes(db: Session = Depends(get_db)):
     recipes = db.query(models.Recipe).all()
     return [recipe_to_dict(r) for r in recipes]
+
+
+@router.get("/search/by-ingredients")
+def search_by_ingredients(ingredients: str, db: Session = Depends(get_db)):
+    ingredient_list = [i.strip().lower() for i in ingredients.split(",") if i.strip()]
+    all_recipes = db.query(models.Recipe).all()
+    results = []
+    for r in all_recipes:
+        recipe_ingredients = [i.get("name", "").lower() for i in json.loads(r.ingredients or "[]")]
+        matches = sum(1 for ing in ingredient_list if any(ing in ri for ri in recipe_ingredients))
+        if matches > 0:
+            d = recipe_to_dict(r)
+            d["match_count"] = matches
+            d["match_ratio"] = matches / len(ingredient_list)
+            results.append(d)
+    results.sort(key=lambda x: x["match_count"], reverse=True)
+    return results
 
 
 @router.get("/{recipe_id}")
@@ -138,19 +154,3 @@ async def upload_recipe_image(recipe_id: int, file: UploadFile = File(...), db: 
     return {"image_path": r.image_path}
 
 
-@router.get("/search/by-ingredients")
-def search_by_ingredients(ingredients: str, db: Session = Depends(get_db)):
-    """Find recipes that match given ingredients (comma-separated)."""
-    ingredient_list = [i.strip().lower() for i in ingredients.split(",") if i.strip()]
-    recipes = db.query(models.Recipe).all()
-    results = []
-    for r in recipes:
-        recipe_ingredients = [i.get("name", "").lower() for i in json.loads(r.ingredients or "[]")]
-        matches = sum(1 for ing in ingredient_list if any(ing in ri for ri in recipe_ingredients))
-        if matches > 0:
-            d = recipe_to_dict(r)
-            d["match_count"] = matches
-            d["match_ratio"] = matches / len(ingredient_list)
-            results.append(d)
-    results.sort(key=lambda x: x["match_count"], reverse=True)
-    return results

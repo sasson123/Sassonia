@@ -1,23 +1,21 @@
-ARG BUILD_FROM=ghcr.io/hassio-addons/base:14.0.0
-FROM $BUILD_FROM
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY frontend/package.json ./
+RUN npm install --silent
+COPY frontend/ ./
+RUN npm run build
 
-# Install Python, Node.js, and build tools
-RUN apk add --no-cache python3 py3-pip nodejs npm gcc musl-dev python3-dev
+# Stage 2: Python backend + built frontend
+FROM python:3.11-alpine
+RUN apk add --no-cache gcc musl-dev libffi-dev
 
 WORKDIR /app
-
-# Build React frontend
-COPY frontend/package.json frontend/package-lock.json* ./frontend/
-RUN cd frontend && npm install --silent
-
-COPY frontend/ ./frontend/
-RUN cd frontend && npm run build
-
-# Install Python backend
-COPY backend/requirements.txt ./backend/
-RUN pip3 install --no-cache-dir -r backend/requirements.txt --break-system-packages
+COPY backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
+COPY --from=frontend-builder /app/dist ./frontend/dist
 
 COPY run.sh /run.sh
 RUN chmod +x /run.sh
