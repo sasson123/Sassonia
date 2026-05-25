@@ -1,0 +1,24 @@
+name: "Sassonia"
+description: "Family Hub — Recipes, Shopping List & Tasks"
+version: "1.0.0"
+slug: "sassonia"
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+homeassistant: "2023.1.0"
+url: "https://github.com/sasson123/Sassonia"
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: "Sassonia Web Interface"
+options:
+  gemini_api_key: ""
+schema:
+  gemini_api_key: str
+map:
+  - data:rw
+panel_icon: "mdi:home-heart"
+panel_title: "Sassonia"
