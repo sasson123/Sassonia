@@ -1,6 +1,6 @@
 name: "Sassonia"
 description: "Family Hub — Recipes, Shopping List & Tasks"
-version: "1.0.5"
+version: "1.0.6"
 slug: "sassonia"
 init: false
 arch:

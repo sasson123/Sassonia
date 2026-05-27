@@ -1,24 +1,24 @@
 import os
 import json
-import google.generativeai as genai
-import google.ai.generativelanguage as glm
+from google import genai
+from google.genai import types
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/gemini", tags=["gemini"])
 
+MODEL = "gemini-2.0-flash"
 
-def get_model():
+
+def get_client():
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(status_code=503, detail="Gemini API key not configured")
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-1.5-flash-latest")
+    return genai.Client(api_key=api_key)
 
 
 def parse_json_response(text: str) -> dict:
     text = text.strip()
-    # Strip markdown code fences if present
     if "```" in text:
         parts = text.split("```")
         for part in parts:
@@ -71,15 +71,18 @@ Return ONLY valid JSON with no markdown, no explanation:
 
 @router.post("/extract-recipe")
 async def extract_recipe_from_image(file: UploadFile = File(...)):
-    model = get_model()
+    client = get_client()
     contents = await file.read()
     mime_type = file.content_type or "image/jpeg"
 
     try:
-        response = model.generate_content([
-            RECIPE_PROMPT,
-            glm.Blob(mime_type=mime_type, data=contents)
-        ])
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=[
+                RECIPE_PROMPT,
+                types.Part.from_bytes(data=contents, mime_type=mime_type),
+            ],
+        )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
@@ -100,11 +103,11 @@ class IngredientsRequest(BaseModel):
 
 @router.post("/suggest-recipes")
 async def suggest_recipes(request: IngredientsRequest):
-    model = get_model()
+    client = get_client()
     prompt = INGREDIENTS_PROMPT.format(ingredients=", ".join(request.ingredients))
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=MODEL, contents=prompt)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
