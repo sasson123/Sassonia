@@ -13,7 +13,7 @@ def get_model():
     if not api_key:
         raise HTTPException(status_code=503, detail="Gemini API key not configured")
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-2.0-flash")
+    return genai.GenerativeModel("gemini-1.5-flash-latest")
 
 
 def parse_json_response(text: str) -> dict:
