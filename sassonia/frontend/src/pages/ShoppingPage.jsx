@@ -52,6 +52,8 @@ export default function ShoppingPage() {
   const [newQty, setNewQty] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [pasteText, setPasteText] = useState('')
+  const [pasteError, setPasteError] = useState('')
+  const [pasteLoading, setPasteLoading] = useState(false)
   const [activeId, setActiveId] = useState(null)
   const inputRef = useRef()
 
@@ -75,10 +77,19 @@ export default function ShoppingPage() {
   async function handlePaste() {
     const parsed = parsePastedList(pasteText)
     if (!parsed.length) return
-    const created = await shoppingApi.addBulk(parsed)
-    setItems(prev => [...prev, ...created])
-    setPasteText('')
-    setShowPaste(false)
+    setPasteLoading(true)
+    setPasteError('')
+    try {
+      const created = await shoppingApi.addBulk(parsed)
+      setItems(prev => [...prev, ...created])
+      setPasteText('')
+      setShowPaste(false)
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      setPasteError(detail || `Failed to add items (${err?.message || 'network error'})`)
+    } finally {
+      setPasteLoading(false)
+    }
   }
 
   async function toggleItem(id, checked) {
@@ -155,16 +166,17 @@ export default function ShoppingPage() {
               className="input-field resize-none mb-2 font-mono text-xs"
               autoFocus
             />
+            {pasteError && <p className="text-red-400 text-xs mb-2">{pasteError}</p>}
             <div className="flex items-center justify-between">
               <p className="text-xs text-slate-500">
                 {previewCount > 0 ? `${previewCount} items detected` : 'One item per line'}
               </p>
               <button
                 onClick={handlePaste}
-                disabled={previewCount === 0}
+                disabled={previewCount === 0 || pasteLoading}
                 className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 rounded-xl text-sm font-medium transition-colors"
               >
-                Add {previewCount > 0 ? previewCount : ''} items
+                {pasteLoading ? 'Adding...' : `Add ${previewCount > 0 ? previewCount : ''} items`}
               </button>
             </div>
           </div>
