@@ -1,9 +1,9 @@
 import os
 import json
-import base64
+import google.generativeai as genai
+import google.ai.generativelanguage as glm
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
-import google.generativeai as genai
 
 router = APIRouter(prefix="/api/gemini", tags=["gemini"])
 
@@ -16,16 +16,31 @@ def get_model():
     return genai.GenerativeModel("gemini-1.5-flash")
 
 
-RECIPE_PROMPT = """
-You are a recipe extraction assistant. Analyze this image and extract the recipe.
-Return ONLY valid JSON in this exact format, no other text:
+def parse_json_response(text: str) -> dict:
+    text = text.strip()
+    # Strip markdown code fences if present
+    if "```" in text:
+        parts = text.split("```")
+        for part in parts:
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:]
+            part = part.strip()
+            if part.startswith("{"):
+                text = part
+                break
+    return json.loads(text)
+
+
+RECIPE_PROMPT = """You are a recipe extraction assistant. Analyze this image and extract the recipe.
+Return ONLY valid JSON with no markdown, no explanation, no extra text — just the raw JSON object:
 {
   "name": "Recipe name",
-  "category": "Category (e.g. Dessert, Main Course, Salad, Soup, Breakfast, Snack)",
+  "category": "Category (Dessert / Main Course / Salad / Soup / Breakfast / Snack)",
   "prep_time": 15,
   "cook_time": 30,
   "servings": 4,
-  "difficulty": "easy|medium|hard",
+  "difficulty": "easy",
   "description": "Short description",
   "ingredients": [
     {"name": "ingredient name", "quantity": "amount and unit"}
@@ -35,16 +50,13 @@ Return ONLY valid JSON in this exact format, no other text:
     "Step 2 description"
   ]
 }
-If the image does not contain a recipe, return {"error": "No recipe found in image"}.
-"""
+If no recipe is visible, return: {"error": "No recipe found in image"}"""
 
-INGREDIENTS_PROMPT = """
-You are a recipe suggestion assistant. The user has these ingredients available:
-{ingredients}
+INGREDIENTS_PROMPT = """You are a recipe suggestion assistant.
+The user has these ingredients: {ingredients}
 
-Search through the provided recipe context and suggest recipes that can be made.
-If no perfect match exists, suggest a creative recipe using MOSTLY these ingredients.
-Return ONLY valid JSON:
+Suggest 3 recipes that can be made mostly from these ingredients.
+Return ONLY valid JSON with no markdown, no explanation:
 {{
   "suggestions": [
     {{
@@ -54,33 +66,27 @@ Return ONLY valid JSON:
       "matching_ingredients": ["ingredient2"]
     }}
   ]
-}}
-"""
+}}"""
 
 
 @router.post("/extract-recipe")
 async def extract_recipe_from_image(file: UploadFile = File(...)):
     model = get_model()
     contents = await file.read()
-    image_data = base64.b64encode(contents).decode("utf-8")
     mime_type = file.content_type or "image/jpeg"
 
-    response = model.generate_content([
-        RECIPE_PROMPT,
-        {"mime_type": mime_type, "data": image_data}
-    ])
-
-    text = response.text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    text = text.strip()
+    try:
+        response = model.generate_content([
+            RECIPE_PROMPT,
+            glm.Blob(mime_type=mime_type, data=contents)
+        ])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="Could not parse recipe from image")
+        data = parse_json_response(response.text)
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     if "error" in data:
         raise HTTPException(status_code=422, detail=data["error"])
@@ -95,20 +101,16 @@ class IngredientsRequest(BaseModel):
 @router.post("/suggest-recipes")
 async def suggest_recipes(request: IngredientsRequest):
     model = get_model()
-    ingredients_str = ", ".join(request.ingredients)
-    prompt = INGREDIENTS_PROMPT.format(ingredients=ingredients_str)
-
-    response = model.generate_content(prompt)
-    text = response.text.strip()
-    if text.startswith("```"):
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-    text = text.strip()
+    prompt = INGREDIENTS_PROMPT.format(ingredients=", ".join(request.ingredients))
 
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="Could not parse suggestions")
+        response = model.generate_content(prompt)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
+
+    try:
+        data = parse_json_response(response.text)
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     return data
