@@ -4,11 +4,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import engine, Base
+from database import engine, Base, run_migrations
 import models
 from routers import recipes, shopping, tasks, gemini
 
 Base.metadata.create_all(bind=engine)
+run_migrations()
 
 app = FastAPI(title="Sassonia API", version="1.0.0")
 

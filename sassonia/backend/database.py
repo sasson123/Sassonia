@@ -19,3 +19,11 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def run_migrations():
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(__import__('sqlalchemy').text("PRAGMA table_info(shopping_items)"))]
+        if "order" not in cols:
+            conn.execute(__import__('sqlalchemy').text("ALTER TABLE shopping_items ADD COLUMN \"order\" INTEGER DEFAULT 0"))
+            conn.commit()
