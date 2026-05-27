@@ -131,10 +131,10 @@ export default function ShoppingPage() {
             )}
             <button
               onClick={() => { setShowPaste(v => !v); setPasteText('') }}
-              className={`p-2 rounded-xl transition-colors ${showPaste ? 'bg-sky-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${showPaste ? 'bg-sky-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
               title="Paste list"
             >
-              <ClipboardList size={18} />
+              <ClipboardList size={16} /> Paste
             </button>
           </div>
         </div>
@@ -172,9 +172,9 @@ export default function ShoppingPage() {
 
         <form onSubmit={addItem} className="flex gap-2">
           <input ref={inputRef} value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="Add item..." className="input-field flex-1" />
+            placeholder="Add item..." className="input-field flex-1 min-w-0" />
           <input value={newQty} onChange={e => setNewQty(e.target.value)}
-            placeholder="Qty" className="input-field w-20" />
+            placeholder="Qty" className="input-field w-14 shrink-0" />
           <button type="submit" className="p-2.5 bg-sky-600 hover:bg-sky-500 rounded-xl transition-colors">
             <Plus size={18} />
           </button>

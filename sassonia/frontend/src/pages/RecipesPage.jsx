@@ -33,7 +33,8 @@ export default function RecipesPage() {
       const data = await gemini.extractRecipe(file)
       navigate('/recipes/new', { state: { prefill: data } })
     } catch (err) {
-      setError('Could not extract recipe from image. Try a clearer photo.')
+      const detail = err?.response?.data?.detail
+      setError(detail ? `Scan failed: ${detail}` : 'Could not extract recipe from image. Try a clearer photo.')
     } finally {
       setUploading(false)
     }
