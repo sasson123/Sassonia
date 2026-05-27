@@ -27,6 +27,7 @@ class ShoppingItem(Base):
     name = Column(String, nullable=False)
     quantity = Column(String, default="")
     checked = Column(Boolean, default=False)
+    order = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
 
 

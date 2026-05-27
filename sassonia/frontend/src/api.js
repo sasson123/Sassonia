@@ -24,6 +24,7 @@ export const shopping = {
   update: (id, data) => api.patch(`/shopping/${id}`, data).then(r => r.data),
   delete: (id) => api.delete(`/shopping/${id}`).then(r => r.data),
   clearChecked: () => api.delete('/shopping/checked/clear').then(r => r.data),
+  reorder: (order) => api.post('/shopping/reorder', { order }).then(r => r.data),
 }
 
 export const tasks = {
