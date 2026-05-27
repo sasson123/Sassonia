@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Camera, ChefHat, Clock, Loader2 } from 'lucide-react'
+import { Plus, Search, Camera, Image, ChefHat, Clock, Loader2 } from 'lucide-react'
 import { recipes as recipesApi, gemini } from '../api'
 
 const CATEGORIES = ['All', 'Main Course', 'Dessert', 'Salad', 'Soup', 'Breakfast', 'Snack', 'Other']
@@ -48,12 +48,22 @@ export default function RecipesPage() {
             <ChefHat className="text-sky-400" size={28} /> Recipes
           </h1>
           <div className="flex gap-2">
-            <label className={`cursor-pointer flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-medium transition-colors
-              ${uploading ? 'bg-slate-700 text-slate-400' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'}`}>
-              {uploading ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
-              {uploading ? 'Reading...' : 'Scan'}
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploading} />
-            </label>
+            {uploading ? (
+              <span className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-medium bg-slate-700 text-slate-400">
+                <Loader2 size={16} className="animate-spin" /> Reading...
+              </span>
+            ) : (
+              <>
+                <label className="cursor-pointer flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors" title="Take photo">
+                  <Camera size={16} />
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                </label>
+                <label className="cursor-pointer flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors" title="Choose from gallery">
+                  <Image size={16} /> Scan
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+              </>
+            )}
             <button
               onClick={() => navigate('/recipes/new')}
               className="flex items-center gap-1 px-3 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-sm font-medium transition-colors"
