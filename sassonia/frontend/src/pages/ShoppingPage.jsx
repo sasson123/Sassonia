@@ -49,7 +49,6 @@ function SortableItem({ item, onToggle, onDelete }) {
 export default function ShoppingPage() {
   const [items, setItems] = useState([])
   const [newName, setNewName] = useState('')
-  const [newQty, setNewQty] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [pasteText, setPasteText] = useState('')
   const [pasteError, setPasteError] = useState('')
@@ -67,10 +66,9 @@ export default function ShoppingPage() {
   async function addItem(e) {
     e.preventDefault()
     if (!newName.trim()) return
-    const item = await shoppingApi.add({ name: newName.trim(), quantity: newQty.trim() })
+    const item = await shoppingApi.add({ name: newName.trim(), quantity: '' })
     setItems(prev => [...prev, item])
     setNewName('')
-    setNewQty('')
     inputRef.current?.focus()
   }
 
@@ -185,8 +183,6 @@ export default function ShoppingPage() {
         <form onSubmit={addItem} className="flex gap-2">
           <input ref={inputRef} value={newName} onChange={e => setNewName(e.target.value)}
             placeholder="Add item..." className="input-field flex-1 min-w-0" />
-          <input value={newQty} onChange={e => setNewQty(e.target.value)}
-            placeholder="Qty" className="input-field w-14 shrink-0" />
           <button type="submit" className="p-2.5 bg-sky-600 hover:bg-sky-500 rounded-xl transition-colors">
             <Plus size={18} />
           </button>
