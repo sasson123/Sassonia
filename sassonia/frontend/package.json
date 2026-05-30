@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/generate-icons.cjs",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -19,6 +20,7 @@
     "@dnd-kit/utilities": "^3.2.2"
   },
   "devDependencies": {
+    "pngjs": "^7.0.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",

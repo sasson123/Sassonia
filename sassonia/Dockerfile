@@ -4,9 +4,6 @@ WORKDIR /app
 COPY frontend/package.json ./
 RUN npm install --silent
 COPY frontend/ ./
-RUN apk add --no-cache librsvg && \
-    rsvg-convert -w 192 -h 192 public/icon.svg -o public/icon-192.png && \
-    rsvg-convert -w 512 -h 512 public/icon.svg -o public/icon-512.png
 RUN npm run build
 
 # Stage 2: Python backend + built frontend
