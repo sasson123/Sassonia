@@ -37,7 +37,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="flex flex-col h-dvh">
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-hidden">
           <Routes>
             <Route path="/" element={<RecipesPage />} />
             <Route path="/recipes" element={<RecipesPage />} />

@@ -41,8 +41,8 @@ export default function RecipesPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <header className="sticky top-0 bg-slate-900 z-10 px-4 pt-4 pb-3 border-b border-slate-800">
+    <div className="flex flex-col h-full">
+      <header className="flex-shrink-0 bg-slate-900 z-10 px-4 pt-4 pb-3 border-b border-slate-800">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <ChefHat className="text-sky-400" size={28} /> Recipes
@@ -97,7 +97,7 @@ export default function RecipesPage() {
 
       {error && <p className="text-red-400 text-sm px-4 pt-3">{error}</p>}
 
-      <div className="px-4 py-4 grid grid-cols-2 gap-3">
+      <div className="flex-1 overflow-y-auto px-4 py-4 grid grid-cols-2 gap-3">
         {filtered.length === 0 && (
           <div className="col-span-2 text-center text-slate-500 py-16">
             <ChefHat size={48} className="mx-auto mb-3 opacity-30" />

@@ -88,7 +88,7 @@ export default function RecipeFormPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-4">
+    <div className="h-full overflow-y-auto max-w-2xl mx-auto px-4 py-4">
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-slate-800">
           <ArrowLeft size={20} />

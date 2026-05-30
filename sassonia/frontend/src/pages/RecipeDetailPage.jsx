@@ -41,7 +41,7 @@ export default function RecipeDetailPage() {
   )
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="h-full overflow-y-auto max-w-2xl mx-auto">
       <div className="relative">
         {recipe.image_path ? (
           <img src={recipe.image_path} alt={recipe.name} className="w-full h-56 object-cover" />

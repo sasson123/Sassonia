@@ -39,8 +39,8 @@ export default function TasksPage() {
   const done = taskList.filter(t => t.done)
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <header className="sticky top-0 bg-slate-900 z-10 px-4 pt-4 pb-3 border-b border-slate-800">
+    <div className="flex flex-col h-full">
+      <header className="flex-shrink-0 bg-slate-900 z-10 px-4 pt-4 pb-3 border-b border-slate-800">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <CheckSquare className="text-sky-400" size={26} /> Tasks
@@ -60,7 +60,7 @@ export default function TasksPage() {
         </form>
       </header>
 
-      <div className="px-4 py-4 space-y-1">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
         {taskList.length === 0 && (
           <div className="text-center text-slate-500 py-16">
             <CheckSquare size={48} className="mx-auto mb-3 opacity-30" />
