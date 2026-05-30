@@ -4,6 +4,7 @@ WORKDIR /app
 COPY frontend/package.json ./
 RUN npm install --silent
 COPY frontend/ ./
+RUN node scripts/generate-icons.cjs
 RUN npm run build
 
 # Stage 2: Python backend + built frontend
