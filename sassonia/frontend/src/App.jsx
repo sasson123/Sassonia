@@ -14,7 +14,7 @@ const NAV_LINKS = [
 
 function NavBar() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 flex z-50">
+    <nav className="flex-shrink-0 bg-slate-800 border-t border-slate-700 flex z-50">
       {NAV_LINKS.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}
@@ -36,16 +36,18 @@ function NavBar() {
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen pb-16">
-        <Routes>
-          <Route path="/" element={<RecipesPage />} />
-          <Route path="/recipes" element={<RecipesPage />} />
-          <Route path="/recipes/new" element={<RecipeFormPage />} />
-          <Route path="/recipes/:id" element={<RecipeDetailPage />} />
-          <Route path="/recipes/:id/edit" element={<RecipeFormPage />} />
-          <Route path="/shopping" element={<ShoppingPage />} />
-          <Route path="/tasks" element={<TasksPage />} />
-        </Routes>
+      <div className="flex flex-col h-dvh">
+        <div className="flex-1 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<RecipesPage />} />
+            <Route path="/recipes" element={<RecipesPage />} />
+            <Route path="/recipes/new" element={<RecipeFormPage />} />
+            <Route path="/recipes/:id" element={<RecipeDetailPage />} />
+            <Route path="/recipes/:id/edit" element={<RecipeFormPage />} />
+            <Route path="/shopping" element={<ShoppingPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+          </Routes>
+        </div>
         <NavBar />
       </div>
     </BrowserRouter>
