@@ -74,7 +74,7 @@ export default function RecipeDetailPage() {
       </div>
 
       <div className="px-4 py-4">
-        <h1 className="text-2xl font-bold text-white mb-2">{recipe.name}</h1>
+        <h1 dir="auto" className="text-2xl font-bold text-white mb-2">{recipe.name}</h1>
 
         <div className="flex flex-wrap gap-2 mb-4">
           {recipe.category && (
@@ -98,7 +98,7 @@ export default function RecipeDetailPage() {
         </div>
 
         {recipe.description && (
-          <p className="text-slate-400 text-sm mb-5 leading-relaxed">{recipe.description}</p>
+          <p dir="auto" className="text-slate-400 text-sm mb-5 leading-relaxed">{recipe.description}</p>
         )}
 
         {recipe.ingredients.length > 0 && (
@@ -119,7 +119,7 @@ export default function RecipeDetailPage() {
               {recipe.ingredients.map((ing, i) => (
                 <li key={i} className="flex items-center gap-3 bg-slate-800 rounded-xl px-4 py-2.5">
                   <span className="text-sky-400 text-xs font-mono w-5 text-center">{i + 1}</span>
-                  <span className="flex-1 text-sm text-white">{ing.name}</span>
+                  <span dir="auto" className="flex-1 text-sm text-white">{ing.name}</span>
                   {ing.quantity && <span className="text-slate-400 text-sm">{ing.quantity}</span>}
                 </li>
               ))}
@@ -136,7 +136,7 @@ export default function RecipeDetailPage() {
                   <span className="flex-shrink-0 w-7 h-7 bg-sky-600 rounded-full flex items-center justify-center text-xs font-bold">
                     {i + 1}
                   </span>
-                  <p className="text-slate-300 text-sm leading-relaxed pt-0.5">{step}</p>
+                  <p dir="auto" className="text-slate-300 text-sm leading-relaxed pt-0.5">{step}</p>
                 </li>
               ))}
             </ol>

@@ -91,7 +91,7 @@ function TaskRow({ task, onToggle, onDelete }) {
           ? <CheckCircle size={22} className="text-sky-500" />
           : <Circle size={22} className="text-slate-500" />}
       </button>
-      <span className={`flex-1 text-sm ${task.done ? 'line-through text-slate-500' : 'text-white'}`}>
+      <span dir="auto" className={`flex-1 text-sm ${task.done ? 'line-through text-slate-500' : 'text-white'}`}>
         {task.title}
       </span>
       <button onClick={() => onDelete(task.id)} className="text-slate-600 hover:text-red-400 p-1">

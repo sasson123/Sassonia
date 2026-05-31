@@ -119,7 +119,7 @@ export default function RecipesPage() {
               </div>
             )}
             <div className="p-3">
-              <p className="font-semibold text-sm text-white leading-tight">{r.name}</p>
+              <p dir="auto" className="font-semibold text-sm text-white leading-tight">{r.name}</p>
               <div className="flex items-center gap-2 mt-1">
                 {(r.prep_time + r.cook_time) > 0 && (
                   <span className="text-xs text-slate-400 flex items-center gap-1">

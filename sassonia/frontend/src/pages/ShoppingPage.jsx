@@ -37,7 +37,7 @@ function SortableItem({ item, onToggle, onDelete }) {
       <button onClick={() => onToggle(item.id, item.checked)} className="flex-shrink-0">
         {item.checked ? <CheckCircle size={22} className="text-sky-500" /> : <Circle size={22} className="text-slate-500" />}
       </button>
-      <span className={`flex-1 text-sm ${item.checked ? 'line-through text-slate-500' : 'text-white'}`}>{item.name}</span>
+      <span dir="auto" className={`flex-1 text-sm ${item.checked ? 'line-through text-slate-500' : 'text-white'}`}>{item.name}</span>
       {item.quantity && <span className="text-slate-400 text-sm">{item.quantity}</span>}
       <button onClick={() => onDelete(item.id)} className="text-slate-600 hover:text-red-400 p-1">
         <Trash2 size={15} />
@@ -211,7 +211,7 @@ export default function ShoppingPage() {
             {activeItem && (
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-slate-700 shadow-xl">
                 <GripVertical size={16} className="text-slate-400" />
-                <span className="text-sm text-white">{activeItem.name}</span>
+                <span dir="auto" className="text-sm text-white">{activeItem.name}</span>
                 {activeItem.quantity && <span className="text-slate-400 text-sm">{activeItem.quantity}</span>}
               </div>
             )}
@@ -228,7 +228,7 @@ export default function ShoppingPage() {
                   <button onClick={() => toggleItem(item.id, item.checked)} className="flex-shrink-0">
                     <CheckCircle size={22} className="text-sky-500" />
                   </button>
-                  <span className="flex-1 text-sm line-through text-slate-500">{item.name}</span>
+                  <span dir="auto" className="flex-1 text-sm line-through text-slate-500">{item.name}</span>
                   {item.quantity && <span className="text-slate-500 text-sm">{item.quantity}</span>}
                   <button onClick={() => deleteItem(item.id)} className="text-slate-600 hover:text-red-400 p-1">
                     <Trash2 size={15} />
