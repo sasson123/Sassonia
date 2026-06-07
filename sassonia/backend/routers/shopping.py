@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/shopping", tags=["shopping"])
 class ShoppingItemCreate(BaseModel):
     name: str
     quantity: str = ""
+    list_name: str = "סופר"
 
 
 class ShoppingItemUpdate(BaseModel):
@@ -31,13 +32,15 @@ def item_to_dict(item: models.ShoppingItem) -> dict:
         "quantity": item.quantity,
         "checked": item.checked,
         "order": item.order,
+        "list_name": item.list_name or "סופר",
     }
 
 
 @router.get("/")
-def list_items(db: Session = Depends(get_db)):
+def list_items(list_name: str = "סופר", db: Session = Depends(get_db)):
     items = (
         db.query(models.ShoppingItem)
+        .filter(models.ShoppingItem.list_name == list_name)
         .order_by(models.ShoppingItem.checked, models.ShoppingItem.order, models.ShoppingItem.id)
         .all()
     )
@@ -46,8 +49,8 @@ def list_items(db: Session = Depends(get_db)):
 
 @router.post("/")
 def add_item(item: ShoppingItemCreate, db: Session = Depends(get_db)):
-    max_order = db.query(models.ShoppingItem).count()
-    db_item = models.ShoppingItem(name=item.name, quantity=item.quantity, order=max_order)
+    max_order = db.query(models.ShoppingItem).filter(models.ShoppingItem.list_name == item.list_name).count()
+    db_item = models.ShoppingItem(name=item.name, quantity=item.quantity, order=max_order, list_name=item.list_name)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -56,10 +59,13 @@ def add_item(item: ShoppingItemCreate, db: Session = Depends(get_db)):
 
 @router.post("/bulk")
 def add_bulk_items(items: List[ShoppingItemCreate], db: Session = Depends(get_db)):
-    base_order = db.query(models.ShoppingItem).count()
+    if not items:
+        return []
+    list_name = items[0].list_name
+    base_order = db.query(models.ShoppingItem).filter(models.ShoppingItem.list_name == list_name).count()
     created = []
     for i, item in enumerate(items):
-        db_item = models.ShoppingItem(name=item.name, quantity=item.quantity, order=base_order + i)
+        db_item = models.ShoppingItem(name=item.name, quantity=item.quantity, order=base_order + i, list_name=item.list_name)
         db.add(db_item)
         created.append(db_item)
     db.commit()
@@ -90,8 +96,11 @@ def update_item(item_id: int, update: ShoppingItemUpdate, db: Session = Depends(
 
 
 @router.delete("/checked/clear")
-def clear_checked(db: Session = Depends(get_db)):
-    db.query(models.ShoppingItem).filter(models.ShoppingItem.checked == True).delete()
+def clear_checked(list_name: str = "סופר", db: Session = Depends(get_db)):
+    db.query(models.ShoppingItem).filter(
+        models.ShoppingItem.checked == True,
+        models.ShoppingItem.list_name == list_name
+    ).delete()
     db.commit()
     return {"ok": True}
 

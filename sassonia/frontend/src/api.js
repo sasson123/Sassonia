@@ -18,12 +18,12 @@ export const recipes = {
 }
 
 export const shopping = {
-  list: () => api.get('/shopping/').then(r => r.data),
+  list: (listName) => api.get('/shopping/', { params: { list_name: listName } }).then(r => r.data),
   add: (data) => api.post('/shopping/', data).then(r => r.data),
   addBulk: (items) => api.post('/shopping/bulk', items).then(r => r.data),
   update: (id, data) => api.patch(`/shopping/${id}`, data).then(r => r.data),
   delete: (id) => api.delete(`/shopping/${id}`).then(r => r.data),
-  clearChecked: () => api.delete('/shopping/checked/clear').then(r => r.data),
+  clearChecked: (listName) => api.delete('/shopping/checked/clear', { params: { list_name: listName } }).then(r => r.data),
   reorder: (order) => api.post('/shopping/reorder', { order }).then(r => r.data),
 }
 

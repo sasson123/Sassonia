@@ -27,3 +27,6 @@ def run_migrations():
         if "order" not in cols:
             conn.execute(__import__('sqlalchemy').text("ALTER TABLE shopping_items ADD COLUMN \"order\" INTEGER DEFAULT 0"))
             conn.commit()
+        if "list_name" not in cols:
+            conn.execute(__import__('sqlalchemy').text("ALTER TABLE shopping_items ADD COLUMN list_name TEXT DEFAULT 'סופר'"))
+            conn.commit()

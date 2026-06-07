@@ -11,6 +11,9 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { shopping as shoppingApi } from '../api'
 
+const DEFAULT_LISTS = ['סופר']
+const LISTS_KEY = 'sassonia_shopping_lists'
+
 function parsePastedList(text) {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean)
   return lines.map(line => {
@@ -47,6 +50,14 @@ function SortableItem({ item, onToggle, onDelete }) {
 }
 
 export default function ShoppingPage() {
+  const [lists, setLists] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(LISTS_KEY)) || DEFAULT_LISTS } catch { return DEFAULT_LISTS }
+  })
+  const [activeList, setActiveList] = useState(() => {
+    const saved = localStorage.getItem(LISTS_KEY + '_active')
+    const allLists = (() => { try { return JSON.parse(localStorage.getItem(LISTS_KEY)) || DEFAULT_LISTS } catch { return DEFAULT_LISTS } })()
+    return saved && allLists.includes(saved) ? saved : allLists[0]
+  })
   const [items, setItems] = useState([])
   const [newName, setNewName] = useState('')
   const [showPaste, setShowPaste] = useState(false)
@@ -54,19 +65,29 @@ export default function ShoppingPage() {
   const [pasteError, setPasteError] = useState('')
   const [pasteLoading, setPasteLoading] = useState(false)
   const [activeId, setActiveId] = useState(null)
+  const [showNewList, setShowNewList] = useState(false)
+  const [newListName, setNewListName] = useState('')
   const inputRef = useRef()
+  const newListInputRef = useRef()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   )
 
-  useEffect(() => { shoppingApi.list().then(setItems) }, [])
+  useEffect(() => {
+    localStorage.setItem(LISTS_KEY, JSON.stringify(lists))
+  }, [lists])
+
+  useEffect(() => {
+    localStorage.setItem(LISTS_KEY + '_active', activeList)
+    shoppingApi.list(activeList).then(setItems)
+  }, [activeList])
 
   async function addItem(e) {
     e.preventDefault()
     if (!newName.trim()) return
-    const item = await shoppingApi.add({ name: newName.trim(), quantity: '' })
+    const item = await shoppingApi.add({ name: newName.trim(), quantity: '', list_name: activeList })
     setItems(prev => [...prev, item])
     setNewName('')
     inputRef.current?.focus()
@@ -78,7 +99,8 @@ export default function ShoppingPage() {
     setPasteLoading(true)
     setPasteError('')
     try {
-      const created = await shoppingApi.addBulk(parsed)
+      const withList = parsed.map(i => ({ ...i, list_name: activeList }))
+      const created = await shoppingApi.addBulk(withList)
       setItems(prev => [...prev, ...created])
       setPasteText('')
       setShowPaste(false)
@@ -101,7 +123,7 @@ export default function ShoppingPage() {
   }
 
   async function clearChecked() {
-    await shoppingApi.clearChecked()
+    await shoppingApi.clearChecked(activeList)
     setItems(prev => prev.filter(i => !i.checked))
   }
 
@@ -118,6 +140,23 @@ export default function ShoppingPage() {
     const newUnchecked = arrayMove(unchecked, oldIndex, newIndex)
     setItems([...newUnchecked, ...checked])
     await shoppingApi.reorder(newUnchecked.map(i => i.id))
+  }
+
+  function addNewList() {
+    const name = newListName.trim()
+    if (!name || lists.includes(name)) return
+    const updated = [...lists, name]
+    setLists(updated)
+    setActiveList(name)
+    setNewListName('')
+    setShowNewList(false)
+  }
+
+  function deleteList(name) {
+    if (lists.length <= 1) return
+    const updated = lists.filter(l => l !== name)
+    setLists(updated)
+    if (activeList === name) setActiveList(updated[0])
   }
 
   const unchecked = items.filter(i => !i.checked)
@@ -148,8 +187,61 @@ export default function ShoppingPage() {
           </div>
         </div>
 
+        {/* List tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none items-center">
+          {lists.map(list => (
+            <div key={list} className="flex-shrink-0 flex items-center gap-1">
+              <button
+                onClick={() => setActiveList(list)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
+                  ${activeList === list ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >
+                {list}
+              </button>
+              {lists.length > 1 && (
+                <button
+                  onClick={() => deleteList(list)}
+                  className="text-slate-600 hover:text-red-400 transition-colors"
+                  title={`Delete "${list}"`}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+
+          {showNewList ? (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <input
+                ref={newListInputRef}
+                value={newListName}
+                onChange={e => setNewListName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addNewList(); if (e.key === 'Escape') { setShowNewList(false); setNewListName('') } }}
+                placeholder="שם הרשימה"
+                dir="auto"
+                className="bg-slate-800 text-white text-xs rounded-full px-3 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                autoFocus
+              />
+              <button onClick={addNewList} className="text-sky-400 hover:text-sky-300 transition-colors">
+                <CheckCircle size={16} />
+              </button>
+              <button onClick={() => { setShowNewList(false); setNewListName('') }} className="text-slate-500 hover:text-slate-300 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowNewList(true)}
+              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
+              title="Add list"
+            >
+              <Plus size={13} /> רשימה חדשה
+            </button>
+          )}
+        </div>
+
         {showPaste && (
-          <div className="mb-3 bg-slate-800 rounded-2xl p-3 border border-slate-700">
+          <div className="mt-3 bg-slate-800 rounded-2xl p-3 border border-slate-700">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-slate-300 font-medium">Paste your shopping list</p>
               <button onClick={() => { setShowPaste(false); setPasteText('') }} className="text-slate-500 hover:text-slate-300">
@@ -180,9 +272,9 @@ export default function ShoppingPage() {
           </div>
         )}
 
-        <form onSubmit={addItem} className="flex gap-2">
+        <form onSubmit={addItem} className="flex gap-2 mt-3">
           <input ref={inputRef} value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="Add item..." className="input-field flex-1 min-w-0" />
+            placeholder={`הוסף פריט ל${activeList}...`} dir="auto" className="input-field flex-1 min-w-0" />
           <button type="submit" className="p-2.5 bg-sky-600 hover:bg-sky-500 rounded-xl transition-colors">
             <Plus size={18} />
           </button>
@@ -193,8 +285,8 @@ export default function ShoppingPage() {
         {items.length === 0 && (
           <div className="text-center text-slate-500 py-16">
             <ShoppingCart size={48} className="mx-auto mb-3 opacity-30" />
-            <p>Your list is empty.</p>
-            <p className="text-sm mt-1">Add items or paste a list.</p>
+            <p>הרשימה ריקה.</p>
+            <p className="text-sm mt-1">הוסף פריטים או הדבק רשימה.</p>
           </div>
         )}
 
