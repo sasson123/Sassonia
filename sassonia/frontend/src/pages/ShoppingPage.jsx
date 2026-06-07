@@ -46,9 +46,19 @@ function SortableItem({ item, onToggle, onDelete }) {
   )
 }
 
+const CACHE_KEY = 'sassonia_lists_cache'
+const ACTIVE_KEY = 'sassonia_active_list'
+const FALLBACK = [{ id: 0, name: 'סופר' }]
+
+function readCache() {
+  try { return JSON.parse(localStorage.getItem(CACHE_KEY)) || FALLBACK } catch { return FALLBACK }
+}
+
 export default function ShoppingPage() {
-  const [lists, setLists] = useState([])
-  const [activeList, setActiveList] = useState(null)
+  const [lists, setLists] = useState(readCache)
+  const [activeList, setActiveList] = useState(
+    () => localStorage.getItem(ACTIVE_KEY) || readCache()[0].name
+  )
   const [items, setItems] = useState([])
   const [newName, setNewName] = useState('')
   const [showPaste, setShowPaste] = useState(false)
@@ -65,12 +75,17 @@ export default function ShoppingPage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   )
 
-  // Load lists from server on mount
+  // Sync lists from server, update cache
   useEffect(() => {
     shoppingApi.getLists().then(data => {
+      if (!data.length) return
       setLists(data)
-      setActiveList(prev => prev && data.find(l => l.name === prev) ? prev : data[0]?.name)
-    })
+      localStorage.setItem(CACHE_KEY, JSON.stringify(data))
+      setActiveList(prev => {
+        const valid = data.find(l => l.name === prev)
+        return valid ? prev : data[0].name
+      })
+    }).catch(() => {})
   }, [])
 
   // Load items when active list changes
@@ -136,37 +151,41 @@ export default function ShoppingPage() {
     await shoppingApi.reorder(newUnchecked.map(i => i.id))
   }
 
+  function switchList(name) {
+    setActiveList(name)
+    localStorage.setItem(ACTIVE_KEY, name)
+  }
+
   async function addNewList() {
     const name = newListName.trim()
     if (!name) return
+    const optimistic = [...lists, { id: Date.now(), name }]
+    setLists(optimistic)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(optimistic))
+    switchList(name)
+    setNewListName('')
+    setShowNewList(false)
     try {
       const created = await shoppingApi.createList(name)
-      setLists(prev => [...prev, created])
-      setActiveList(created.name)
-      setNewListName('')
-      setShowNewList(false)
-    } catch (err) {
-      // list already exists — just switch to it
-      setActiveList(name)
-      setNewListName('')
-      setShowNewList(false)
+      setLists(prev => prev.map(l => l.name === name ? created : l))
+    } catch {
+      // already exists on server — that's fine
     }
   }
 
   async function deleteList(name) {
     if (lists.length <= 1) return
-    await shoppingApi.deleteList(name)
     const updated = lists.filter(l => l.name !== name)
     setLists(updated)
-    if (activeList === name) setActiveList(updated[0].name)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(updated))
+    if (activeList === name) switchList(updated[0].name)
+    await shoppingApi.deleteList(name).catch(() => {})
   }
 
   const unchecked = items.filter(i => !i.checked)
   const checked = items.filter(i => i.checked)
   const activeItem = items.find(i => i.id === activeId)
   const previewCount = parsePastedList(pasteText).length
-
-  if (!activeList) return null
 
   return (
     <div className="flex flex-col h-full">
@@ -196,7 +215,7 @@ export default function ShoppingPage() {
           {lists.map(list => (
             <div key={list.id} className="flex-shrink-0 flex items-center gap-1">
               <button
-                onClick={() => setActiveList(list.name)}
+                onClick={() => switchList(list.name)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
                   ${activeList === list.name ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
               >
