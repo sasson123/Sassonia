@@ -18,6 +18,9 @@ export const recipes = {
 }
 
 export const shopping = {
+  getLists: () => api.get('/shopping/lists').then(r => r.data),
+  createList: (name) => api.post('/shopping/lists', { name }).then(r => r.data),
+  deleteList: (name) => api.delete(`/shopping/lists/${encodeURIComponent(name)}`).then(r => r.data),
   list: (listName) => api.get('/shopping/', { params: { list_name: listName } }).then(r => r.data),
   add: (data) => api.post('/shopping/', data).then(r => r.data),
   addBulk: (items) => api.post('/shopping/bulk', items).then(r => r.data),

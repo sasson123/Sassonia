@@ -22,11 +22,23 @@ def get_db():
 
 
 def run_migrations():
+    text = __import__('sqlalchemy').text
     with engine.connect() as conn:
-        cols = [row[1] for row in conn.execute(__import__('sqlalchemy').text("PRAGMA table_info(shopping_items)"))]
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(shopping_items)"))]
         if "order" not in cols:
-            conn.execute(__import__('sqlalchemy').text("ALTER TABLE shopping_items ADD COLUMN \"order\" INTEGER DEFAULT 0"))
+            conn.execute(text("ALTER TABLE shopping_items ADD COLUMN \"order\" INTEGER DEFAULT 0"))
             conn.commit()
         if "list_name" not in cols:
-            conn.execute(__import__('sqlalchemy').text("ALTER TABLE shopping_items ADD COLUMN list_name TEXT DEFAULT 'סופר'"))
+            conn.execute(text("ALTER TABLE shopping_items ADD COLUMN list_name TEXT DEFAULT 'סופר'"))
+            conn.commit()
+
+        # Create shopping_lists table if missing and seed default list
+        tables = [row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))]
+        if "shopping_lists" not in tables:
+            conn.execute(text(
+                "CREATE TABLE shopping_lists "
+                "(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, position INTEGER DEFAULT 0, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+            ))
+            conn.execute(text("INSERT INTO shopping_lists (name, position) VALUES ('סופר', 0)"))
             conn.commit()

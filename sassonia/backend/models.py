@@ -20,6 +20,15 @@ class Recipe(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class ShoppingList(Base):
+    __tablename__ = "shopping_lists"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    position = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class ShoppingItem(Base):
     __tablename__ = "shopping_items"
 

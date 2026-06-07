@@ -11,9 +11,6 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { shopping as shoppingApi } from '../api'
 
-const DEFAULT_LISTS = ['סופר']
-const LISTS_KEY = 'sassonia_shopping_lists'
-
 function parsePastedList(text) {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean)
   return lines.map(line => {
@@ -50,14 +47,8 @@ function SortableItem({ item, onToggle, onDelete }) {
 }
 
 export default function ShoppingPage() {
-  const [lists, setLists] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(LISTS_KEY)) || DEFAULT_LISTS } catch { return DEFAULT_LISTS }
-  })
-  const [activeList, setActiveList] = useState(() => {
-    const saved = localStorage.getItem(LISTS_KEY + '_active')
-    const allLists = (() => { try { return JSON.parse(localStorage.getItem(LISTS_KEY)) || DEFAULT_LISTS } catch { return DEFAULT_LISTS } })()
-    return saved && allLists.includes(saved) ? saved : allLists[0]
-  })
+  const [lists, setLists] = useState([])
+  const [activeList, setActiveList] = useState(null)
   const [items, setItems] = useState([])
   const [newName, setNewName] = useState('')
   const [showPaste, setShowPaste] = useState(false)
@@ -68,20 +59,23 @@ export default function ShoppingPage() {
   const [showNewList, setShowNewList] = useState(false)
   const [newListName, setNewListName] = useState('')
   const inputRef = useRef()
-  const newListInputRef = useRef()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   )
 
+  // Load lists from server on mount
   useEffect(() => {
-    localStorage.setItem(LISTS_KEY, JSON.stringify(lists))
-  }, [lists])
+    shoppingApi.getLists().then(data => {
+      setLists(data)
+      setActiveList(prev => prev && data.find(l => l.name === prev) ? prev : data[0]?.name)
+    })
+  }, [])
 
+  // Load items when active list changes
   useEffect(() => {
-    localStorage.setItem(LISTS_KEY + '_active', activeList)
-    shoppingApi.list(activeList).then(setItems)
+    if (activeList) shoppingApi.list(activeList).then(setItems)
   }, [activeList])
 
   async function addItem(e) {
@@ -142,27 +136,37 @@ export default function ShoppingPage() {
     await shoppingApi.reorder(newUnchecked.map(i => i.id))
   }
 
-  function addNewList() {
+  async function addNewList() {
     const name = newListName.trim()
-    if (!name || lists.includes(name)) return
-    const updated = [...lists, name]
-    setLists(updated)
-    setActiveList(name)
-    setNewListName('')
-    setShowNewList(false)
+    if (!name) return
+    try {
+      const created = await shoppingApi.createList(name)
+      setLists(prev => [...prev, created])
+      setActiveList(created.name)
+      setNewListName('')
+      setShowNewList(false)
+    } catch (err) {
+      // list already exists — just switch to it
+      setActiveList(name)
+      setNewListName('')
+      setShowNewList(false)
+    }
   }
 
-  function deleteList(name) {
+  async function deleteList(name) {
     if (lists.length <= 1) return
-    const updated = lists.filter(l => l !== name)
+    await shoppingApi.deleteList(name)
+    const updated = lists.filter(l => l.name !== name)
     setLists(updated)
-    if (activeList === name) setActiveList(updated[0])
+    if (activeList === name) setActiveList(updated[0].name)
   }
 
   const unchecked = items.filter(i => !i.checked)
   const checked = items.filter(i => i.checked)
   const activeItem = items.find(i => i.id === activeId)
   const previewCount = parsePastedList(pasteText).length
+
+  if (!activeList) return null
 
   return (
     <div className="flex flex-col h-full">
@@ -190,19 +194,19 @@ export default function ShoppingPage() {
         {/* List tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none items-center">
           {lists.map(list => (
-            <div key={list} className="flex-shrink-0 flex items-center gap-1">
+            <div key={list.id} className="flex-shrink-0 flex items-center gap-1">
               <button
-                onClick={() => setActiveList(list)}
+                onClick={() => setActiveList(list.name)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
-                  ${activeList === list ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                  ${activeList === list.name ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
               >
-                {list}
+                {list.name}
               </button>
               {lists.length > 1 && (
                 <button
-                  onClick={() => deleteList(list)}
+                  onClick={() => deleteList(list.name)}
                   className="text-slate-600 hover:text-red-400 transition-colors"
-                  title={`Delete "${list}"`}
+                  title={`Delete "${list.name}"`}
                 >
                   <X size={12} />
                 </button>
@@ -213,7 +217,6 @@ export default function ShoppingPage() {
           {showNewList ? (
             <div className="flex items-center gap-1 flex-shrink-0">
               <input
-                ref={newListInputRef}
                 value={newListName}
                 onChange={e => setNewListName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') addNewList(); if (e.key === 'Escape') { setShowNewList(false); setNewListName('') } }}
@@ -233,7 +236,6 @@ export default function ShoppingPage() {
             <button
               onClick={() => setShowNewList(true)}
               className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
-              title="Add list"
             >
               <Plus size={13} /> רשימה חדשה
             </button>

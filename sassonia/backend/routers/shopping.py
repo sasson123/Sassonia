@@ -9,6 +9,53 @@ import models
 router = APIRouter(prefix="/api/shopping", tags=["shopping"])
 
 
+# ── List management ──────────────────────────────────────────────
+
+class ShoppingListCreate(BaseModel):
+    name: str
+
+
+@router.get("/lists")
+def get_lists(db: Session = Depends(get_db)):
+    lists = db.query(models.ShoppingList).order_by(models.ShoppingList.position, models.ShoppingList.id).all()
+    if not lists:
+        default = models.ShoppingList(name="סופר", position=0)
+        db.add(default)
+        db.commit()
+        db.refresh(default)
+        lists = [default]
+    return [{"id": l.id, "name": l.name} for l in lists]
+
+
+@router.post("/lists")
+def create_list(data: ShoppingListCreate, db: Session = Depends(get_db)):
+    existing = db.query(models.ShoppingList).filter(models.ShoppingList.name == data.name).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="List already exists")
+    position = db.query(models.ShoppingList).count()
+    lst = models.ShoppingList(name=data.name, position=position)
+    db.add(lst)
+    db.commit()
+    db.refresh(lst)
+    return {"id": lst.id, "name": lst.name}
+
+
+@router.delete("/lists/{list_name}")
+def delete_list(list_name: str, db: Session = Depends(get_db)):
+    count = db.query(models.ShoppingList).count()
+    if count <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last list")
+    lst = db.query(models.ShoppingList).filter(models.ShoppingList.name == list_name).first()
+    if not lst:
+        raise HTTPException(status_code=404, detail="List not found")
+    db.query(models.ShoppingItem).filter(models.ShoppingItem.list_name == list_name).delete()
+    db.delete(lst)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Items ────────────────────────────────────────────────────────
+
 class ShoppingItemCreate(BaseModel):
     name: str
     quantity: str = ""
