@@ -23,6 +23,28 @@ function parsePastedList(text) {
   }).filter(i => i.name)
 }
 
+function ConfirmDialog({ message, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-6" onClick={onCancel}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="relative bg-slate-800 rounded-2xl p-5 w-full max-w-xs shadow-xl border border-slate-700"
+        onClick={e => e.stopPropagation()}>
+        <p dir="auto" className="text-white text-sm text-center mb-5">{message}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel}
+            className="flex-1 py-2 rounded-xl text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors">
+            ביטול
+          </button>
+          <button onClick={onConfirm}
+            className="flex-1 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors">
+            מחק
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SortableItem({ item, onToggle, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
@@ -39,7 +61,7 @@ function SortableItem({ item, onToggle, onDelete }) {
       </button>
       <span dir="auto" className={`flex-1 text-sm ${item.checked ? 'line-through text-slate-500' : 'text-white'}`}>{item.name}</span>
       {item.quantity && <span className="text-slate-400 text-sm">{item.quantity}</span>}
-      <button onClick={() => onDelete(item.id)} className="text-slate-600 hover:text-red-400 p-1">
+      <button onClick={() => onDelete(item.id, item.checked)} className="text-slate-600 hover:text-red-400 p-1">
         <Trash2 size={15} />
       </button>
     </div>
@@ -68,6 +90,7 @@ export default function ShoppingPage() {
   const [activeId, setActiveId] = useState(null)
   const [showNewList, setShowNewList] = useState(false)
   const [newListName, setNewListName] = useState('')
+  const [confirm, setConfirm] = useState(null) // { message, onConfirm }
   const inputRef = useRef()
 
   const sensors = useSensors(
@@ -126,9 +149,18 @@ export default function ShoppingPage() {
     setItems(prev => prev.map(i => i.id === id ? updated : i))
   }
 
-  async function deleteItem(id) {
+  async function doDeleteItem(id) {
     await shoppingApi.delete(id)
     setItems(prev => prev.filter(i => i.id !== id))
+  }
+
+  function deleteItem(id, isChecked) {
+    if (isChecked) { doDeleteItem(id); return }
+    const item = items.find(i => i.id === id)
+    setConfirm({
+      message: `למחוק את "${item?.name}"?`,
+      onConfirm: () => { setConfirm(null); doDeleteItem(id) },
+    })
   }
 
   async function clearChecked() {
@@ -173,13 +205,20 @@ export default function ShoppingPage() {
     }
   }
 
-  async function deleteList(name) {
+  function deleteList(name) {
     if (lists.length <= 1) return
-    const updated = lists.filter(l => l.name !== name)
-    setLists(updated)
-    localStorage.setItem(CACHE_KEY, JSON.stringify(updated))
-    if (activeList === name) switchList(updated[0].name)
-    await shoppingApi.deleteList(name).catch(() => {})
+    const count = items.length
+    setConfirm({
+      message: `למחוק את הרשימה "${name}"${count > 0 ? ` ואת ${count} הפריטים בה` : ''}?`,
+      onConfirm: async () => {
+        setConfirm(null)
+        const updated = lists.filter(l => l.name !== name)
+        setLists(updated)
+        localStorage.setItem(CACHE_KEY, JSON.stringify(updated))
+        if (activeList === name) switchList(updated[0].name)
+        await shoppingApi.deleteList(name).catch(() => {})
+      },
+    })
   }
 
   const unchecked = items.filter(i => !i.checked)
@@ -189,6 +228,7 @@ export default function ShoppingPage() {
 
   return (
     <div className="flex flex-col h-full">
+      {confirm && <ConfirmDialog message={confirm.message} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(null)} />}
       <header className="flex-shrink-0 bg-slate-900 z-10 px-4 pt-4 pb-3 border-b border-slate-800">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-2xl font-bold flex items-center gap-2">
