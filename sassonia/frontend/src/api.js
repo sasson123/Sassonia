@@ -45,6 +45,7 @@ export const gemini = {
     form.append('file', file)
     return api.post('/gemini/extract-recipe', form).then(r => r.data)
   },
+  extractFromUrl: (url) => api.post('/gemini/extract-from-url', { url }).then(r => r.data),
   suggestRecipes: (ingredients) =>
     api.post('/gemini/suggest-recipes', { ingredients }).then(r => r.data),
 }

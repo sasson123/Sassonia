@@ -26,6 +26,7 @@ class RecipeCreate(BaseModel):
     description: str = ""
     ingredients: list = []
     steps: list = []
+    source_url: str = ""
 
 
 class RecipeOut(BaseModel):
@@ -40,6 +41,7 @@ class RecipeOut(BaseModel):
     ingredients: list
     steps: list
     image_path: str
+    source_url: str = ""
 
     class Config:
         from_attributes = True
@@ -58,6 +60,7 @@ def recipe_to_dict(r: models.Recipe) -> dict:
         "ingredients": json.loads(r.ingredients or "[]"),
         "steps": json.loads(r.steps or "[]"),
         "image_path": r.image_path,
+        "source_url": getattr(r, "source_url", "") or "",
     }
 
 
@@ -104,6 +107,7 @@ def create_recipe(recipe: RecipeCreate, db: Session = Depends(get_db)):
         description=recipe.description,
         ingredients=json.dumps(recipe.ingredients, ensure_ascii=False),
         steps=json.dumps(recipe.steps, ensure_ascii=False),
+        source_url=recipe.source_url,
     )
     db.add(db_recipe)
     db.commit()
@@ -125,6 +129,7 @@ def update_recipe(recipe_id: int, recipe: RecipeCreate, db: Session = Depends(ge
     r.description = recipe.description
     r.ingredients = json.dumps(recipe.ingredients, ensure_ascii=False)
     r.steps = json.dumps(recipe.steps, ensure_ascii=False)
+    r.source_url = recipe.source_url
     db.commit()
     return recipe_to_dict(r)
 

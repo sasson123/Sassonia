@@ -17,6 +17,7 @@ class Recipe(Base):
     ingredients = Column(Text, default="[]")   # JSON string
     steps = Column(Text, default="[]")          # JSON string
     image_path = Column(String, default="")
+    source_url = Column(String, default="")
     created_at = Column(DateTime, server_default=func.now())
 
 

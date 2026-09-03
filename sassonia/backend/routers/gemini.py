@@ -101,6 +101,113 @@ class IngredientsRequest(BaseModel):
     ingredients: list[str]
 
 
+class UrlExtractRequest(BaseModel):
+    url: str
+
+
+def fetch_url_content(url: str) -> str:
+    import urllib.request
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=12) as resp:
+        charset = resp.headers.get_content_charset() or "utf-8"
+        raw_bytes = resp.read()
+        try:
+            return raw_bytes.decode(charset, errors="replace")
+        except Exception:
+            return raw_bytes.decode("utf-8", errors="replace")
+
+
+def clean_html(html_text: str) -> str:
+    import re
+    matches = re.findall(r'<script[^>]*type=[\'"]application/ld\+json[\'"][^>]*>(.*?)</script>', html_text, re.DOTALL | re.IGNORECASE)
+    for m in matches:
+        try:
+            parsed = json.loads(m.strip())
+            items = []
+            if isinstance(parsed, list):
+                items = parsed
+            elif isinstance(parsed, dict):
+                if "@graph" in parsed and isinstance(parsed["@graph"], list):
+                    items = parsed["@graph"]
+                else:
+                    items = [parsed]
+            for item in items:
+                types = item.get("@type")
+                if types == "Recipe" or (isinstance(types, list) and "Recipe" in types):
+                    return f"SCHEMA_RECIPE_JSON: {json.dumps(item, ensure_ascii=False)}"
+        except Exception:
+            pass
+
+    clean = re.sub(r'<(script|style)[^>]*>.*?</\1>', ' ', html_text, flags=re.DOTALL | re.IGNORECASE)
+    clean = re.sub(r'<[^>]+>', ' ', clean)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean[:40000]
+
+
+@router.post("/extract-from-url")
+async def extract_recipe_from_url(request: UrlExtractRequest):
+    url = request.url.strip()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    try:
+        html_content = fetch_url_content(url)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch webpage: {str(e)}")
+
+    extracted_text = clean_html(html_content)
+    if not extracted_text:
+        raise HTTPException(status_code=422, detail="No readable content found at this URL")
+
+    prompt = (
+        "You are a recipe extraction assistant. Extract the recipe from this webpage content.\n"
+        "If the text is in Hebrew, output in Hebrew. If in English, output in English.\n"
+        "Return ONLY valid JSON with no markdown, no explanation, no backticks:\n"
+        "{\n"
+        '  "name": "Recipe name",\n'
+        '  "category": "Category (Dessert / Main Course / Salad / Soup / Breakfast / Snack / Other)",\n'
+        '  "prep_time": 15,\n'
+        '  "cook_time": 30,\n'
+        '  "servings": 4,\n'
+        '  "difficulty": "easy",\n'
+        '  "description": "Short description",\n'
+        '  "ingredients": [\n'
+        '    {"name": "ingredient name", "quantity": "amount and unit"}\n'
+        '  ],\n'
+        '  "steps": [\n'
+        '    "Step 1 description",\n'
+        '    "Step 2 description"\n'
+        '  ]\n'
+        "}\n"
+        'If no recipe is found, return: {"error": "No recipe found on this webpage"}\n\n'
+        f"Webpage content:\n{extracted_text}"
+    )
+
+    client = get_client()
+    try:
+        response = client.models.generate_content(model=MODEL, contents=prompt)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
+
+    try:
+        data = parse_json_response(response.text)
+    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
+
+    if "error" in data:
+        raise HTTPException(status_code=422, detail=data["error"])
+
+    data["source_url"] = url
+    return data
+
+
 @router.post("/suggest-recipes")
 async def suggest_recipes(request: IngredientsRequest):
     client = get_client()
@@ -117,3 +224,4 @@ async def suggest_recipes(request: IngredientsRequest):
         raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     return data
+

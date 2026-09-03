@@ -32,6 +32,11 @@ def run_migrations():
             conn.execute(text("ALTER TABLE shopping_items ADD COLUMN list_name TEXT DEFAULT 'סופר'"))
             conn.commit()
 
+        recipe_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(recipes)"))]
+        if "source_url" not in recipe_cols:
+            conn.execute(text("ALTER TABLE recipes ADD COLUMN source_url TEXT DEFAULT ''"))
+            conn.commit()
+
         # Create shopping_lists table if missing and seed default list
         tables = [row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))]
         if "shopping_lists" not in tables:
