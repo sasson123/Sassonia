@@ -45,7 +45,34 @@ export const gemini = {
     form.append('file', file)
     return api.post('/gemini/extract-recipe', form).then(r => r.data)
   },
-  extractFromUrl: (url) => api.post('/gemini/extract-from-url', { url }).then(r => r.data),
+
+  // Parse recipe from raw HTML string (browser fetched it, avoids bot-blocking)
+  parseHtml: (html, source_url) =>
+    api.post('/gemini/parse-html', { html, source_url }).then(r => r.data),
+
+  // Smart URL extraction: browser fetches first, falls back to server-side fetch
+  extractFromUrl: async (url) => {
+    // Try browser-side fetch first (avoids Cloudflare/bot blocking on recipe sites)
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' },
+        signal: AbortSignal.timeout(15000),
+        mode: 'cors',
+      })
+      if (resp.ok) {
+        const html = await resp.text()
+        if (html && html.length > 200) {
+          return api.post('/gemini/parse-html', { html, source_url: url }).then(r => r.data)
+        }
+      }
+    } catch {
+      // CORS blocked or network error — fall back to server-side fetch
+    }
+    // Backend fallback (works for non-CORS-restricted sites)
+    return api.post('/gemini/extract-from-url', { url }).then(r => r.data)
+  },
+
   suggestRecipes: (ingredients) =>
     api.post('/gemini/suggest-recipes', { ingredients }).then(r => r.data),
 }
