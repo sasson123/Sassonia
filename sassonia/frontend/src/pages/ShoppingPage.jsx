@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, ShoppingCart, CheckCircle, Circle, GripVertical, ClipboardList, X } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Plus, Trash2, ShoppingCart, CheckCircle, Circle, GripVertical, ClipboardList, X, Loader2 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, DragOverlay
@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { shopping as shoppingApi } from '../api'
+import { getCachedItems, cacheItems, removeCachedItems, enqueue, getQueueLength, flush } from '../offlineSync'
 
 function parsePastedList(text) {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean)
@@ -76,12 +77,15 @@ function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY)) || FALLBACK } catch { return FALLBACK }
 }
 
+// Counter for temporary offline IDs (negative to avoid collisions with server IDs)
+let tempIdCounter = -1
+
 export default function ShoppingPage() {
   const [lists, setLists] = useState(readCache)
   const [activeList, setActiveList] = useState(
     () => localStorage.getItem(ACTIVE_KEY) || readCache()[0].name
   )
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState(() => getCachedItems(localStorage.getItem(ACTIVE_KEY) || readCache()[0].name) || [])
   const [newName, setNewName] = useState('')
   const [showPaste, setShowPaste] = useState(false)
   const [pasteText, setPasteText] = useState('')
@@ -91,12 +95,30 @@ export default function ShoppingPage() {
   const [showNewList, setShowNewList] = useState(false)
   const [newListName, setNewListName] = useState('')
   const [confirm, setConfirm] = useState(null) // { message, onConfirm }
+  const [syncing, setSyncing] = useState(() => getQueueLength() > 0)
   const inputRef = useRef()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   )
+
+  // Track sync queue status
+  useEffect(() => {
+    const check = () => setSyncing(getQueueLength() > 0)
+    check()
+    const interval = setInterval(check, 2_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Helper: update items state AND persist to cache
+  const setItemsCached = useCallback((updater) => {
+    setItems(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      cacheItems(activeList, next)
+      return next
+    })
+  }, [activeList])
 
   // Sync lists from server, update cache
   useEffect(() => {
@@ -111,18 +133,42 @@ export default function ShoppingPage() {
     }).catch(() => {})
   }, [])
 
-  // Load items when active list changes
+  // Load items: stale-while-revalidate
   useEffect(() => {
-    if (activeList) shoppingApi.list(activeList).then(setItems)
+    if (!activeList) return
+    // 1. Load from cache immediately (synchronous, instant)
+    const cached = getCachedItems(activeList)
+    if (cached) setItems(cached)
+    // 2. Refresh from server in background
+    shoppingApi.list(activeList)
+      .then(serverItems => {
+        setItems(serverItems)
+        cacheItems(activeList, serverItems)
+      })
+      .catch(() => {
+        // Offline — cache is already displayed, nothing to do
+      })
   }, [activeList])
 
-  async function addItem(e) {
+  // ── Optimistic mutations ──────────────────────────────────────
+
+  function addItem(e) {
     e.preventDefault()
     if (!newName.trim()) return
-    const item = await shoppingApi.add({ name: newName.trim(), quantity: '', list_name: activeList })
-    setItems(prev => [...prev, item])
+    const name = newName.trim()
+    // Optimistic: add with temp ID immediately
+    const tempItem = { id: tempIdCounter--, name, quantity: '', checked: false, order: items.length, list_name: activeList }
+    setItemsCached(prev => [...prev, tempItem])
     setNewName('')
     inputRef.current?.focus()
+    // Sync to server
+    const payload = { name, quantity: '', list_name: activeList }
+    shoppingApi.add(payload)
+      .then(serverItem => {
+        // Replace temp item with server item (which has a real ID)
+        setItemsCached(prev => prev.map(i => i.id === tempItem.id ? serverItem : i))
+      })
+      .catch(() => enqueue({ type: 'add', payload }))
   }
 
   async function handlePaste() {
@@ -133,7 +179,7 @@ export default function ShoppingPage() {
     try {
       const withList = parsed.map(i => ({ ...i, list_name: activeList }))
       const created = await shoppingApi.addBulk(withList)
-      setItems(prev => [...prev, ...created])
+      setItemsCached(prev => [...prev, ...created])
       setPasteText('')
       setShowPaste(false)
     } catch (err) {
@@ -144,14 +190,22 @@ export default function ShoppingPage() {
     }
   }
 
-  async function toggleItem(id, checked) {
-    const updated = await shoppingApi.update(id, { checked: !checked })
-    setItems(prev => prev.map(i => i.id === id ? updated : i))
+  function toggleItem(id, checked) {
+    // 1. Update UI + cache immediately
+    setItemsCached(prev => prev.map(i => i.id === id ? { ...i, checked: !checked } : i))
+    // 2. Sync to server in background
+    shoppingApi.update(id, { checked: !checked })
+      .catch(() => enqueue({ type: 'toggle', payload: { id, checked: !checked } }))
   }
 
-  async function doDeleteItem(id) {
-    await shoppingApi.delete(id)
-    setItems(prev => prev.filter(i => i.id !== id))
+  function doDeleteItem(id) {
+    // 1. Update UI + cache immediately
+    setItemsCached(prev => prev.filter(i => i.id !== id))
+    // 2. Sync to server (skip for temp items that never reached the server)
+    if (id > 0) {
+      shoppingApi.delete(id)
+        .catch(() => enqueue({ type: 'delete', payload: { id } }))
+    }
   }
 
   function deleteItem(id, isChecked) {
@@ -163,14 +217,17 @@ export default function ShoppingPage() {
     })
   }
 
-  async function clearChecked() {
-    await shoppingApi.clearChecked(activeList)
-    setItems(prev => prev.filter(i => !i.checked))
+  function clearChecked() {
+    // 1. Update UI + cache immediately
+    setItemsCached(prev => prev.filter(i => !i.checked))
+    // 2. Sync to server
+    shoppingApi.clearChecked(activeList)
+      .catch(() => enqueue({ type: 'clearChecked', payload: { listName: activeList } }))
   }
 
   function handleDragStart(event) { setActiveId(event.active.id) }
 
-  async function handleDragEnd(event) {
+  function handleDragEnd(event) {
     setActiveId(null)
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -179,8 +236,12 @@ export default function ShoppingPage() {
     const newIndex = ids.indexOf(over.id)
     if (oldIndex === -1 || newIndex === -1) return
     const newUnchecked = arrayMove(unchecked, oldIndex, newIndex)
-    setItems([...newUnchecked, ...checked])
-    await shoppingApi.reorder(newUnchecked.map(i => i.id))
+    // 1. Update UI + cache immediately
+    setItemsCached([...newUnchecked, ...checked])
+    // 2. Sync to server
+    const order = newUnchecked.map(i => i.id)
+    shoppingApi.reorder(order)
+      .catch(() => enqueue({ type: 'reorder', payload: { order } }))
   }
 
   function switchList(name) {
@@ -215,6 +276,7 @@ export default function ShoppingPage() {
         const updated = lists.filter(l => l.name !== name)
         setLists(updated)
         localStorage.setItem(CACHE_KEY, JSON.stringify(updated))
+        removeCachedItems(name)
         if (activeList === name) switchList(updated[0].name)
         await shoppingApi.deleteList(name).catch(() => {})
       },
@@ -233,6 +295,11 @@ export default function ShoppingPage() {
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ShoppingCart className="text-sky-400" size={26} /> Shopping List
+            {syncing && (
+              <span className="flex items-center gap-1 text-xs font-normal text-amber-400 animate-pulse" title="Syncing pending changes...">
+                <Loader2 size={12} className="animate-spin" />
+              </span>
+            )}
           </h1>
           <div className="flex items-center gap-2">
             {checked.length > 0 && (
