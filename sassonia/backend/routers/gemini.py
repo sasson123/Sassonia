@@ -2,9 +2,12 @@ import os
 import re
 import json
 import base64
+import gzip
+import zlib
 import logging
 import traceback
-from google import genai
+import urllib.request
+import urllib.error
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
@@ -12,14 +15,61 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/gemini", tags=["gemini"])
 
-MODEL = "gemini-2.0-flash-lite"
+# Candidate models in priority order. If one is deprecated/unavailable, automatically fallback.
+MODELS = ["gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-flash-lite-latest"]
 
 
-def get_client():
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
+def get_api_key() -> str:
+    key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not key:
         raise HTTPException(status_code=503, detail="Gemini API key not configured")
-    return genai.Client(api_key=api_key)
+    return key
+
+
+def call_gemini_generate(parts: list, timeout: int = 35) -> str:
+    """Calls the Google Generative Language REST API directly with automatic model fallback."""
+    key = get_api_key()
+    payload = json.dumps({"contents": [{"parts": parts}]}).encode("utf-8")
+    last_error = None
+
+    for model_name in MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                candidates = res_data.get("candidates", [])
+                if not candidates:
+                    raise ValueError("No candidates returned from Gemini")
+                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                return text
+        except urllib.error.HTTPError as e:
+            err_body = ""
+            try:
+                err_body = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                pass
+            logger.warning("Gemini model %s returned HTTP %s: %s", model_name, e.code, err_body)
+            last_error = f"HTTP {e.code}: {err_body}"
+            # If 404 (model not found/deprecated), try next model
+            if e.code == 404:
+                continue
+            # For 429 (rate limit) or 503 (service unavailable), also try next model
+            if e.code in (429, 503):
+                continue
+            # For 400 or other client errors, don't retry if invalid argument
+            raise HTTPException(status_code=502, detail=f"Gemini API error: {last_error}")
+        except Exception as e:
+            logger.warning("Gemini model %s failed: %s", model_name, str(e))
+            last_error = str(e)
+            continue
+
+    logger.error("All Gemini candidate models failed. Last error: %s", last_error)
+    raise HTTPException(status_code=502, detail=f"Gemini API unavailable: {last_error}")
 
 
 def parse_json_response(text: str) -> dict:
@@ -37,16 +87,19 @@ def parse_json_response(text: str) -> dict:
     return json.loads(text)
 
 
-RECIPE_PROMPT = """You are a recipe extraction assistant. Analyze this image and extract the recipe.
-Return ONLY valid JSON with no markdown, no explanation, no extra text — just the raw JSON object:
+RECIPE_PROMPT = """You are an expert recipe extraction assistant.
+Analyze this recipe image (photo of a cookbook, handwritten recipe, dish with recipe card, or screenshot).
+Extract the recipe details. If the text is in Hebrew, output in Hebrew. If in English, output in English.
+
+Return ONLY valid JSON with no markdown formatting, no explanations, no code blocks:
 {
   "name": "Recipe name",
-  "category": "Category (Dessert / Main Course / Salad / Soup / Breakfast / Snack)",
+  "category": "Category (עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר)",
   "prep_time": 15,
   "cook_time": 30,
   "servings": 4,
   "difficulty": "easy",
-  "description": "Short description",
+  "description": "Short appetizing description",
   "ingredients": [
     {"name": "ingredient name", "quantity": "amount and unit"}
   ],
@@ -55,7 +108,7 @@ Return ONLY valid JSON with no markdown, no explanation, no extra text — just 
     "Step 2 description"
   ]
 }
-If no recipe is visible, return: {"error": "No recipe found in image"}"""
+If no recipe is visible in the image, return: {"error": "No recipe found in image"}"""
 
 INGREDIENTS_PROMPT = """You are a recipe suggestion assistant.
 The user has these ingredients: {ingredients}
@@ -73,13 +126,38 @@ Return ONLY valid JSON with no markdown, no explanation:
   ]
 }}"""
 
+URL_PROMPT = """You are an expert recipe extraction assistant. Extract the complete recipe from this webpage content.
+If the webpage text is in Hebrew, output in Hebrew. If in English, output in English.
+
+Return ONLY valid JSON with no markdown formatting, no explanations, no backticks:
+{
+  "name": "Recipe name",
+  "category": "Category (עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר)",
+  "prep_time": 15,
+  "cook_time": 30,
+  "servings": 4,
+  "difficulty": "easy",
+  "description": "Short description",
+  "ingredients": [
+    {"name": "ingredient name", "quantity": "amount and unit"}
+  ],
+  "steps": [
+    "Step 1 description",
+    "Step 2 description"
+  ]
+}
+If no recipe is found on this page, return: {"error": "No recipe found"}
+
+Webpage content:
+"""
+
 
 def clean_html_for_gemini(html_text: str) -> str:
-    """Extract Schema.org Recipe JSON-LD or clean HTML down to readable text."""
-    # First try structured data (most reliable)
+    # 1. First priority: Check for Schema.org JSON-LD Recipe (highest accuracy)
     matches = re.findall(
         r'<script[^>]*type=[\'"]application/ld\+json[\'"][^>]*>(.*?)</script>',
-        html_text, re.DOTALL | re.IGNORECASE
+        html_text,
+        re.DOTALL | re.IGNORECASE,
     )
     for m in matches:
         try:
@@ -99,69 +177,77 @@ def clean_html_for_gemini(html_text: str) -> str:
         except Exception:
             pass
 
-    # Strip scripts/styles then tags
-    clean = re.sub(r'<(script|style)[^>]*>.*?</\1>', ' ', html_text, flags=re.DOTALL | re.IGNORECASE)
+    # 2. Strip scripts and stylesheets
+    clean = re.sub(r'<(script|style|svg|noscript)[^>]*>.*?</\1>', ' ', html_text, flags=re.DOTALL | re.IGNORECASE)
+    # 3. Strip HTML tags
     clean = re.sub(r'<[^>]+>', ' ', clean)
+    # 4. Collapse whitespace
     clean = re.sub(r'\s+', ' ', clean).strip()
     return clean[:40000]
 
 
-EXTRACT_PROMPT = """\
-You are a recipe extraction assistant. Extract the recipe from this content.
-If the text is in Hebrew, output in Hebrew. If English, output in English.
-Return ONLY valid JSON with no markdown, no explanation, no backticks:
-{
-  "name": "Recipe name",
-  "category": "Category (עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / Other)",
-  "prep_time": 15,
-  "cook_time": 30,
-  "servings": 4,
-  "difficulty": "easy",
-  "description": "Short description",
-  "ingredients": [
-    {"name": "ingredient name", "quantity": "amount and unit"}
-  ],
-  "steps": [
-    "Step 1 description",
-    "Step 2 description"
-  ]
-}
-If no recipe is found, return: {"error": "No recipe found"}
+def fetch_url(url: str) -> str:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        content_encoding = resp.headers.get("Content-Encoding", "").lower()
+        raw = resp.read()
+        if content_encoding == "gzip":
+            try:
+                raw = gzip.decompress(raw)
+            except Exception:
+                pass
+        elif content_encoding == "deflate":
+            try:
+                raw = zlib.decompress(raw)
+            except Exception:
+                pass
 
-Content:
-"""
+        charset = resp.headers.get_content_charset() or "utf-8"
+        try:
+            return raw.decode(charset, errors="replace")
+        except Exception:
+            return raw.decode("utf-8", errors="replace")
 
 
 @router.post("/extract-recipe")
 async def extract_recipe_from_image(file: UploadFile = File(...)):
-    """Extract recipe from an uploaded image using Gemini vision."""
-    client = get_client()
+    """Extracts a recipe from an uploaded photo or screenshot."""
     contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
     mime_type = file.content_type or "image/jpeg"
     if not mime_type.startswith("image/"):
         mime_type = "image/jpeg"
 
-    # Build contents list using the stable google-genai API
-    # Pass image as inline base64 part
-    image_part = {
-        "inline_data": {
-            "mime_type": mime_type,
-            "data": base64.b64encode(contents).decode("utf-8"),
-        }
-    }
+    b64_data = base64.b64encode(contents).decode("utf-8")
+    parts = [
+        {"text": RECIPE_PROMPT},
+        {"inline_data": {"mime_type": mime_type, "data": b64_data}},
+    ]
+
+    raw_response = call_gemini_generate(parts, timeout=40)
 
     try:
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=[{"parts": [{"text": RECIPE_PROMPT}, image_part]}],
-        )
+        data = parse_json_response(raw_response)
     except Exception as e:
-        logger.error("Gemini extract-recipe FAILED: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
-
-    try:
-        data = parse_json_response(response.text)
-    except (json.JSONDecodeError, ValueError, AttributeError) as e:
+        logger.error("Could not parse Gemini JSON: %s\nRaw was: %s", str(e), raw_response[:300])
         raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     if "error" in data:
@@ -170,31 +256,61 @@ async def extract_recipe_from_image(file: UploadFile = File(...)):
     return data
 
 
+class UrlExtractRequest(BaseModel):
+    url: str
+
+
+@router.post("/extract-from-url")
+async def extract_recipe_from_url(request: UrlExtractRequest):
+    """Fetches a webpage URL, extracts the recipe, and formats it."""
+    url = request.url.strip()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    try:
+        html_content = fetch_url(url)
+    except Exception as e:
+        logger.error("fetch_url failed for %s: %s\n%s", url, str(e), traceback.format_exc())
+        raise HTTPException(status_code=502, detail=f"Failed to fetch webpage: {str(e)}")
+
+    cleaned = clean_html_for_gemini(html_content)
+    if not cleaned.strip():
+        raise HTTPException(status_code=422, detail="No readable content found at this URL")
+
+    prompt = URL_PROMPT + cleaned
+    raw_response = call_gemini_generate([{"text": prompt}], timeout=35)
+
+    try:
+        data = parse_json_response(raw_response)
+    except Exception as e:
+        logger.error("Could not parse Gemini JSON from URL extract: %s", str(e))
+        raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
+
+    if "error" in data:
+        raise HTTPException(status_code=422, detail=data["error"])
+
+    data["source_url"] = url
+    return data
+
+
 class HtmlParseRequest(BaseModel):
-    """Frontend fetches the URL and sends us the raw HTML/text to parse."""
     html: str
     source_url: str = ""
 
 
 @router.post("/parse-html")
 async def parse_recipe_from_html(request: HtmlParseRequest):
-    """Parse a recipe from raw HTML (fetched by the browser, avoids bot-blocking)."""
-    extracted_text = clean_html_for_gemini(request.html)
-    if not extracted_text.strip():
+    """Parses recipe from raw HTML."""
+    cleaned = clean_html_for_gemini(request.html)
+    if not cleaned.strip():
         raise HTTPException(status_code=422, detail="No readable content provided")
 
-    prompt = EXTRACT_PROMPT + extracted_text
+    prompt = URL_PROMPT + cleaned
+    raw_response = call_gemini_generate([{"text": prompt}], timeout=35)
 
-    client = get_client()
     try:
-        response = client.models.generate_content(model=MODEL, contents=prompt)
+        data = parse_json_response(raw_response)
     except Exception as e:
-        logger.error("Gemini parse-html FAILED: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
-
-    try:
-        data = parse_json_response(response.text)
-    except (json.JSONDecodeError, ValueError, AttributeError) as e:
         raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     if "error" in data:
@@ -206,80 +322,18 @@ async def parse_recipe_from_html(request: HtmlParseRequest):
     return data
 
 
-class UrlExtractRequest(BaseModel):
-    url: str
-
-
-@router.post("/extract-from-url")
-async def extract_recipe_from_url(request: UrlExtractRequest):
-    """Backend-side URL fetch (fallback). Prefer /parse-html where possible."""
-    import urllib.request as ureq
-    url = request.url.strip()
-    if not url.startswith("http://") and not url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
-
-    try:
-        req = ureq.Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-                "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Encoding": "gzip, deflate",
-            },
-        )
-        with ureq.urlopen(req, timeout=15) as resp:
-            charset = resp.headers.get_content_charset() or "utf-8"
-            raw = resp.read()
-            try:
-                html_content = raw.decode(charset, errors="replace")
-            except Exception:
-                html_content = raw.decode("utf-8", errors="replace")
-    except Exception as e:
-        logger.error("fetch_url_content FAILED for %s: %s\n%s", url, str(e), traceback.format_exc())
-        raise HTTPException(status_code=502, detail=f"Failed to fetch webpage: {str(e)}")
-
-    extracted_text = clean_html_for_gemini(html_content)
-    if not extracted_text.strip():
-        raise HTTPException(status_code=422, detail="No readable content found at this URL")
-
-    prompt = EXTRACT_PROMPT + extracted_text
-    client = get_client()
-    try:
-        response = client.models.generate_content(model=MODEL, contents=prompt)
-    except Exception as e:
-        logger.error("Gemini extract-from-url FAILED: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
-
-    try:
-        data = parse_json_response(response.text)
-    except (json.JSONDecodeError, ValueError, AttributeError) as e:
-        raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
-
-    if "error" in data:
-        raise HTTPException(status_code=422, detail=data["error"])
-
-    data["source_url"] = url
-    return data
-
-
 class IngredientsRequest(BaseModel):
     ingredients: list[str]
 
 
 @router.post("/suggest-recipes")
 async def suggest_recipes(request: IngredientsRequest):
-    client = get_client()
     prompt = INGREDIENTS_PROMPT.format(ingredients=", ".join(request.ingredients))
+    raw_response = call_gemini_generate([{"text": prompt}], timeout=25)
 
     try:
-        response = client.models.generate_content(model=MODEL, contents=prompt)
+        data = parse_json_response(raw_response)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
-
-    try:
-        data = parse_json_response(response.text)
-    except (json.JSONDecodeError, ValueError, AttributeError) as e:
         raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     return data
