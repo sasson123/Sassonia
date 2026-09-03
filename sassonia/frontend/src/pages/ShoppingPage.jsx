@@ -5,7 +5,7 @@ import {
   useSensor, useSensors, DragOverlay
 } from '@dnd-kit/core'
 import {
-  SortableContext, verticalListSortingStrategy,
+  SortableContext, verticalListSortingStrategy, horizontalListSortingStrategy,
   useSortable, arrayMove
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -42,6 +42,45 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SortableTab({ list, isActive, isOnly, onSelect, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: list.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="flex-shrink-0 flex items-center gap-1 select-none touch-pan-x cursor-grab active:cursor-grabbing"
+    >
+      <button
+        onClick={() => onSelect(list.name)}
+        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer
+          ${isActive ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+      >
+        {list.name}
+      </button>
+      {!isOnly && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(list.name)
+          }}
+          className="text-slate-600 hover:text-red-400 transition-colors p-0.5"
+          title={`Delete "${list.name}"`}
+        >
+          <X size={12} />
+        </button>
+      )}
     </div>
   )
 }
@@ -96,12 +135,20 @@ export default function ShoppingPage() {
   const [newListName, setNewListName] = useState('')
   const [confirm, setConfirm] = useState(null) // { message, onConfirm }
   const [syncing, setSyncing] = useState(() => getQueueLength() > 0)
+  const [activeTabId, setActiveTabId] = useState(null)
   const inputRef = useRef()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   )
+
+  const tabSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+  )
+
+  const activeTab = lists.find(l => l.id === activeTabId)
 
   // Track sync queue status
   useEffect(() => {
@@ -244,6 +291,23 @@ export default function ShoppingPage() {
       .catch(() => enqueue({ type: 'reorder', payload: { order } }))
   }
 
+  function handleTabDragStart(event) { setActiveTabId(event.active.id) }
+
+  function handleTabDragEnd(event) {
+    setActiveTabId(null)
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = lists.findIndex(l => l.id === active.id)
+    const newIndex = lists.findIndex(l => l.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    const newLists = arrayMove(lists, oldIndex, newIndex)
+    setLists(newLists)
+    localStorage.setItem(CACHE_KEY, JSON.stringify(newLists))
+    const order = newLists.map(l => l.id)
+    shoppingApi.reorderLists(order)
+      .catch(() => enqueue({ type: 'reorderLists', payload: { order } }))
+  }
+
   function switchList(name) {
     setActiveList(name)
     localStorage.setItem(ACTIVE_KEY, name)
@@ -318,55 +382,61 @@ export default function ShoppingPage() {
         </div>
 
         {/* List tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none items-center">
-          {lists.map(list => (
-            <div key={list.id} className="flex-shrink-0 flex items-center gap-1">
-              <button
-                onClick={() => switchList(list.name)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
-                  ${activeList === list.name ? 'bg-sky-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >
-                {list.name}
-              </button>
-              {lists.length > 1 && (
-                <button
-                  onClick={() => deleteList(list.name)}
-                  className="text-slate-600 hover:text-red-400 transition-colors"
-                  title={`Delete "${list.name}"`}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          ))}
+        <DndContext
+          sensors={tabSensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleTabDragStart}
+          onDragEnd={handleTabDragEnd}
+        >
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none items-center">
+            <SortableContext items={lists.map(l => l.id)} strategy={horizontalListSortingStrategy}>
+              {lists.map(list => (
+                <SortableTab
+                  key={list.id}
+                  list={list}
+                  isActive={activeList === list.name}
+                  isOnly={lists.length <= 1}
+                  onSelect={switchList}
+                  onDelete={deleteList}
+                />
+              ))}
+            </SortableContext>
 
-          {showNewList ? (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <input
-                value={newListName}
-                onChange={e => setNewListName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addNewList(); if (e.key === 'Escape') { setShowNewList(false); setNewListName('') } }}
-                placeholder="שם הרשימה"
-                dir="auto"
-                className="bg-slate-800 text-white text-xs rounded-full px-3 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                autoFocus
-              />
-              <button onClick={addNewList} className="text-sky-400 hover:text-sky-300 transition-colors">
-                <CheckCircle size={16} />
+            {showNewList ? (
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <input
+                  value={newListName}
+                  onChange={e => setNewListName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addNewList(); if (e.key === 'Escape') { setShowNewList(false); setNewListName('') } }}
+                  placeholder="שם הרשימה"
+                  dir="auto"
+                  className="bg-slate-800 text-white text-xs rounded-full px-3 py-1 w-28 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  autoFocus
+                />
+                <button onClick={addNewList} className="text-sky-400 hover:text-sky-300 transition-colors">
+                  <CheckCircle size={16} />
+                </button>
+                <button onClick={() => { setShowNewList(false); setNewListName('') }} className="text-slate-500 hover:text-slate-300 transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewList(true)}
+                className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
+              >
+                <Plus size={13} /> רשימה חדשה
               </button>
-              <button onClick={() => { setShowNewList(false); setNewListName('') }} className="text-slate-500 hover:text-slate-300 transition-colors">
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowNewList(true)}
-              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors"
-            >
-              <Plus size={13} /> רשימה חדשה
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+          <DragOverlay>
+            {activeTab && (
+              <div className="px-3 py-1 rounded-full text-xs font-medium bg-sky-600 text-white shadow-xl scale-105 border border-sky-400/50">
+                {activeTab.name}
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
 
         {showPaste && (
           <div className="mt-3 bg-slate-800 rounded-2xl p-3 border border-slate-700">

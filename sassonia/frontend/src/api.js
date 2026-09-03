@@ -28,6 +28,7 @@ export const shopping = {
   delete: (id) => api.delete(`/shopping/${id}`).then(r => r.data),
   clearChecked: (listName) => api.delete('/shopping/checked/clear', { params: { list_name: listName } }).then(r => r.data),
   reorder: (order) => api.post('/shopping/reorder', { order }).then(r => r.data),
+  reorderLists: (order) => api.post('/shopping/lists/reorder', { order }).then(r => r.data),
 }
 
 export const tasks = {

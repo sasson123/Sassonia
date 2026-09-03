@@ -54,6 +54,19 @@ def delete_list(list_name: str, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+class ReorderListsRequest(BaseModel):
+    order: List[int]
+
+
+@router.post("/lists/reorder")
+def reorder_lists(req: ReorderListsRequest, db: Session = Depends(get_db)):
+    for position, list_id in enumerate(req.order):
+        db.query(models.ShoppingList).filter(models.ShoppingList.id == list_id).update({"position": position})
+    db.commit()
+    return {"ok": True}
+
+
+
 # ── Items ────────────────────────────────────────────────────────
 
 class ShoppingItemCreate(BaseModel):

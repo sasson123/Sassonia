@@ -86,6 +86,9 @@ async function executeMutation(m) {
     case 'reorder':
       await shoppingApi.reorder(m.payload.order)
       break
+    case 'reorderLists':
+      await shoppingApi.reorderLists(m.payload.order)
+      break
   }
 }
 

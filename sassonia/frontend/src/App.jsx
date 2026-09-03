@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { ShoppingCart, CheckSquare, BookOpen } from 'lucide-react'
 import RecipesPage from './pages/RecipesPage'
 import RecipeDetailPage from './pages/RecipeDetailPage'
@@ -7,8 +7,8 @@ import ShoppingPage from './pages/ShoppingPage'
 import TasksPage from './pages/TasksPage'
 
 const NAV_LINKS = [
-  { to: '/recipes', icon: BookOpen, label: 'Recipes' },
   { to: '/shopping', icon: ShoppingCart, label: 'Shopping' },
+  { to: '/recipes', icon: BookOpen, label: 'Recipes' },
   { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
 ]
 
@@ -39,7 +39,7 @@ export default function App() {
       <div className="flex flex-col h-dvh">
         <div className="flex-1 overflow-hidden">
           <Routes>
-            <Route path="/" element={<RecipesPage />} />
+            <Route path="/" element={<Navigate to="/shopping" replace />} />
             <Route path="/recipes" element={<RecipesPage />} />
             <Route path="/recipes/new" element={<RecipeFormPage />} />
             <Route path="/recipes/:id" element={<RecipeDetailPage />} />
