@@ -1,9 +1,13 @@
 import os
 import json
+import logging
+import traceback
 from google import genai
 from google.genai import types
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/gemini", tags=["gemini"])
 
@@ -84,6 +88,7 @@ async def extract_recipe_from_image(file: UploadFile = File(...)):
             ],
         )
     except Exception as e:
+        logger.error("Gemini extract-recipe FAILED: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
     try:
@@ -160,6 +165,7 @@ async def extract_recipe_from_url(request: UrlExtractRequest):
     try:
         html_content = fetch_url_content(url)
     except Exception as e:
+        logger.error("fetch_url_content FAILED for %s: %s\n%s", url, str(e), traceback.format_exc())
         raise HTTPException(status_code=502, detail=f"Failed to fetch webpage: {str(e)}")
 
     extracted_text = clean_html(html_content)
@@ -194,6 +200,7 @@ async def extract_recipe_from_url(request: UrlExtractRequest):
     try:
         response = client.models.generate_content(model=MODEL, contents=prompt)
     except Exception as e:
+        logger.error("Gemini extract-from-url FAILED: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
     try:
