@@ -109,9 +109,10 @@ export default function RecipeDetailPage() {
   )
 
   const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0)
+  const isHebrew = /[\u0590-\u05FF]/.test((recipe.name || '') + ' ' + (recipe.description || '')) || true
 
   return (
-    <div className="h-full overflow-y-auto max-w-2xl mx-auto pb-12">
+    <div className="h-full overflow-y-auto max-w-2xl mx-auto pb-12" dir={isHebrew ? 'rtl' : 'ltr'}>
       {/* Top Hero Image & Actions */}
       <div className="relative">
         {recipe.image_path ? (
@@ -126,13 +127,14 @@ export default function RecipeDetailPage() {
         {/* Back button */}
         <button
           onClick={() => navigate('/recipes')}
-          className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur p-2.5 rounded-full text-slate-200 hover:text-white transition-colors"
+          className="absolute top-4 start-4 bg-slate-900/80 backdrop-blur p-2.5 rounded-full text-slate-200 hover:text-white transition-colors"
+          title="חזרה"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={20} className={isHebrew ? 'rotate-180' : ''} />
         </button>
 
-        {/* Top Right Action Buttons */}
-        <div className="absolute top-4 right-4 flex gap-2">
+        {/* Top Action Buttons (opposite side) */}
+        <div className="absolute top-4 end-4 flex gap-2">
           {recipe.source_url && (
             <a
               href={recipe.source_url}

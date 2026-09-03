@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, ChevronRight, ChevronLeft, CheckCircle2, Circle, ListOrdered, BookOpen, Clock, Play, Pause, RotateCcw, Volume2 } from 'lucide-react'
+import { X, ChevronRight, ChevronLeft, CheckCircle2, Circle, ListOrdered, BookOpen, Clock, Play, Pause, RotateCcw } from 'lucide-react'
 
-export default function CookingModeModal({ recipe, scaledIngredients, onClose }) {
+export default function CookingModeModal({ recipe, scaledIngredients = [], onClose }) {
   const [currentStep, setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState({})
+  const [checkedIngredients, setCheckedIngredients] = useState({})
   const [showIngredients, setShowIngredients] = useState(false)
   const [viewMode, setViewMode] = useState('step') // 'step' | 'list'
   const [wakeLockActive, setWakeLockActive] = useState(false)
@@ -16,6 +17,13 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
 
   const steps = recipe.steps || []
   const totalSteps = steps.length
+
+  // Detect Hebrew
+  const isHebrew = /[\u0590-\u05FF]/.test(
+    (recipe.name || '') + ' ' +
+    (recipe.description || '') + ' ' +
+    steps.join(' ')
+  )
 
   // Screen Wake Lock API management
   useEffect(() => {
@@ -62,13 +70,12 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
           if (prev <= 1) {
             clearInterval(timerRef.current)
             setTimerRunning(false)
-            // Play alert sound & vibrate if available
             try {
               if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300])
               const ctx = new (window.AudioContext || window.webkitAudioContext)()
               const osc = ctx.createOscillator()
               osc.type = 'sine'
-              osc.frequency.setValueAtTime(587.33, ctx.currentTime) // D5
+              osc.frequency.setValueAtTime(587.33, ctx.currentTime)
               osc.connect(ctx.destination)
               osc.start()
               osc.stop(ctx.currentTime + 0.6)
@@ -97,6 +104,10 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
     setCompletedSteps(prev => ({ ...prev, [idx]: !prev[idx] }))
   }
 
+  function toggleIngredient(idx) {
+    setCheckedIngredients(prev => ({ ...prev, [idx]: !prev[idx] }))
+  }
+
   function formatTime(sec) {
     const m = Math.floor(sec / 60)
     const s = sec % 60
@@ -104,7 +115,7 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col select-none">
+    <div className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col select-none" dir={isHebrew ? 'rtl' : 'ltr'}>
       {/* Top Header */}
       <header className="flex-shrink-0 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -116,7 +127,7 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
             <X size={22} />
           </button>
           <div>
-            <h2 dir="auto" className="font-bold text-base line-clamp-1 max-w-[200px] sm:max-w-md">{recipe.name}</h2>
+            <h2 className="font-bold text-base line-clamp-1 max-w-[180px] sm:max-w-md text-right">{recipe.name}</h2>
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <span className={`inline-block w-2 h-2 rounded-full ${wakeLockActive ? 'bg-green-400 animate-pulse' : 'bg-slate-500'}`} />
               <span>{wakeLockActive ? 'מסך תמיד דולק' : 'מצב הכנה'}</span>
@@ -125,7 +136,7 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
         </div>
 
         {/* View toggles and Timer button */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" dir="ltr">
           <button
             onClick={() => setShowTimer(v => !v)}
             className={`p-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors ${
@@ -143,7 +154,7 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
             }`}
           >
             <BookOpen size={16} />
-            <span>מרכיבים</span>
+            <span>מצרכים</span>
           </button>
 
           <button
@@ -192,9 +203,9 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
       <div className="flex-1 overflow-hidden relative flex flex-col">
         {viewMode === 'step' ? (
           /* Step-by-Step Focus View */
-          <div className="flex-1 flex flex-col justify-between p-6 max-w-2xl mx-auto w-full">
+          <div className="flex-1 flex flex-col justify-between p-4 sm:p-6 max-w-2xl mx-auto w-full">
             {/* Progress indicator */}
-            <div className="mb-4">
+            <div className="mb-3">
               <div className="flex justify-between text-xs text-slate-400 font-medium mb-1.5">
                 <span>שלב {currentStep + 1} מתוך {totalSteps}</span>
                 <span>{Math.round(((currentStep + 1) / totalSteps) * 100)}%</span>
@@ -210,7 +221,7 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
             {/* Current Step Big Card */}
             <div
               onClick={() => toggleStep(currentStep)}
-              className={`flex-1 flex flex-col justify-center items-center p-6 rounded-3xl cursor-pointer border transition-all ${
+              className={`flex-1 flex flex-col justify-center items-center p-6 sm:p-8 rounded-3xl cursor-pointer border transition-all ${
                 completedSteps[currentStep]
                   ? 'bg-slate-900/60 border-green-500/40 text-slate-400'
                   : 'bg-slate-900 border-slate-800 text-white shadow-2xl'
@@ -228,19 +239,19 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
                 )}
               </div>
 
-              <p dir="auto" className={`text-xl sm:text-2xl md:text-3xl text-center leading-relaxed font-medium ${completedSteps[currentStep] ? 'line-through' : ''}`}>
+              <p className={`text-xl sm:text-2xl md:text-3xl text-center leading-relaxed font-medium ${completedSteps[currentStep] ? 'line-through' : ''}`}>
                 {steps[currentStep]}
               </p>
             </div>
 
             {/* Navigation Big Touch Buttons */}
-            <div className="flex items-center justify-between gap-4 mt-6">
+            <div className="flex items-center justify-between gap-4 mt-5">
               <button
                 onClick={() => setCurrentStep(s => Math.max(0, s - 1))}
                 disabled={currentStep === 0}
                 className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-colors"
               >
-                <ChevronRight size={22} /> הקודם
+                {isHebrew ? <ChevronRight size={22} /> : <ChevronLeft size={22} />} הקודם
               </button>
 
               <button
@@ -256,7 +267,7 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
                     : 'bg-sky-600 hover:bg-sky-500 text-white'
                 }`}
               >
-                {currentStep === totalSteps - 1 ? 'סיימתי הכל! 🎉' : 'הבא'} <ChevronLeft size={22} />
+                {currentStep === totalSteps - 1 ? 'סיימתי הכל! 🎉' : 'הבא'} {isHebrew ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
               </button>
             </div>
           </div>
@@ -282,9 +293,9 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
                       <Circle size={24} className="text-slate-500" />
                     )}
                   </button>
-                  <div className="flex-1">
+                  <div className="flex-1 text-right">
                     <span className="text-xs font-bold text-sky-400 block mb-1">שלב {idx + 1}</span>
-                    <p dir="auto" className={`text-base sm:text-lg leading-relaxed ${isDone ? 'line-through text-slate-500' : 'text-slate-100'}`}>
+                    <p className={`text-base sm:text-lg leading-relaxed ${isDone ? 'line-through text-slate-500' : 'text-slate-100'}`}>
                       {step}
                     </p>
                   </div>
@@ -294,11 +305,12 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
           </div>
         )}
 
-        {/* Quick Ingredients Slide-Over Drawer */}
+        {/* Quick Ingredients Slide-Over Drawer with RTL: Name on right, Quantity on left */}
         {showIngredients && (
-          <div className="absolute inset-0 bg-black/60 z-20 backdrop-blur-sm flex justify-end" onClick={() => setShowIngredients(false)}>
+          <div className="absolute inset-0 bg-black/60 z-20 backdrop-blur-sm flex justify-start" onClick={() => setShowIngredients(false)}>
             <div
-              className="bg-slate-900 w-full max-w-md h-full shadow-2xl p-5 overflow-y-auto flex flex-col border-l border-slate-800 animate-slideLeft"
+              className="bg-slate-900 w-full max-w-md h-full shadow-2xl p-5 overflow-y-auto flex flex-col border-l sm:border-l-0 sm:border-r border-slate-800 animate-fadeIn"
+              dir={isHebrew ? 'rtl' : 'ltr'}
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
@@ -310,20 +322,52 @@ export default function CookingModeModal({ recipe, scaledIngredients, onClose })
                 </button>
               </div>
 
-              <div className="flex-1 space-y-2">
-                {scaledIngredients.map((ing, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/80">
-                    <span dir="auto" className="text-sm font-medium text-white">{ing.name}</span>
-                    <span dir="auto" className="text-sm text-sky-400 font-semibold">{ing.quantity}</span>
-                  </div>
-                ))}
+              <div className="flex justify-between items-center text-xs text-slate-400 px-2 pb-2 font-semibold">
+                <span>מצרך (לחץ לסימון V)</span>
+                <span>כמות</span>
+              </div>
+
+              <div className="flex-1 space-y-2 overflow-y-auto">
+                {scaledIngredients.map((ing, idx) => {
+                  const isChecked = checkedIngredients[idx]
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => toggleIngredient(idx)}
+                      className={`flex items-center justify-between p-3 rounded-2xl cursor-pointer transition-colors ${
+                        isChecked ? 'bg-slate-800/40 opacity-50' : 'bg-slate-800/80 hover:bg-slate-800'
+                      }`}
+                    >
+                      {/* Right side in RTL: Checkbox + Ingredient Name */}
+                      <div className="flex items-center gap-3 min-w-0 flex-1 pl-2">
+                        <button type="button" className="flex-shrink-0">
+                          {isChecked ? (
+                            <CheckCircle2 size={20} className="text-sky-400" />
+                          ) : (
+                            <Circle size={20} className="text-slate-500" />
+                          )}
+                        </button>
+                        <span className={`text-sm sm:text-base font-medium truncate text-right ${isChecked ? 'line-through text-slate-500' : 'text-white'}`}>
+                          {ing.name}
+                        </span>
+                      </div>
+
+                      {/* Left side in RTL: Quantity */}
+                      {ing.quantity && (
+                        <span className={`text-sm sm:text-base font-semibold flex-shrink-0 text-left ${isChecked ? 'text-slate-500' : 'text-sky-400'}`}>
+                          {ing.quantity}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
 
               <button
                 onClick={() => setShowIngredients(false)}
-                className="w-full mt-4 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-medium text-slate-300 transition-colors"
+                className="w-full mt-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-medium text-slate-200 transition-colors"
               >
-                סגור וחזור לשלבים
+                חזור להכנת המתכון
               </button>
             </div>
           </div>

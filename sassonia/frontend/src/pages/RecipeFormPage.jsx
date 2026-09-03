@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, Save, Camera, Loader2, ClipboardList, Link as LinkIcon, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Camera, Loader2, ClipboardList, Link as LinkIcon, X } from 'lucide-react'
 import { recipes as recipesApi } from '../api'
 
 function parsePastedIngredients(text) {
@@ -43,6 +43,13 @@ export default function RecipeFormPage() {
   const [bulkIngText, setBulkIngText] = useState('')
   const [showBulkSteps, setShowBulkSteps] = useState(false)
   const [bulkStepsText, setBulkStepsText] = useState('')
+
+  // Detect Hebrew content
+  const isHebrew = /[\u0590-\u05FF]/.test(
+    form.name + ' ' +
+    form.description + ' ' +
+    form.ingredients.map(i => i.name).join(' ')
+  ) || true
 
   useEffect(() => {
     if (location.state?.prefill) {
@@ -111,7 +118,6 @@ export default function RecipeFormPage() {
   function applyBulkIngredients() {
     const parsed = parsePastedIngredients(bulkIngText)
     if (parsed.length > 0) {
-      // Filter out empty initial field if any
       const current = form.ingredients.filter(i => i.name.trim())
       setField('ingredients', [...current, ...parsed])
     }
@@ -155,13 +161,13 @@ export default function RecipeFormPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto max-w-2xl mx-auto px-4 py-4 pb-16">
+    <div className="h-full overflow-y-auto max-w-2xl mx-auto px-3 sm:px-4 py-4 pb-16" dir={isHebrew ? 'rtl' : 'ltr'}>
       {/* Top Header */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={() => navigate(-1)} className="p-2 rounded-full hover:bg-slate-800 text-slate-300">
-          <ArrowLeft size={20} />
+          {isHebrew ? <ArrowRight size={20} /> : <ArrowLeft size={20} />}
         </button>
-        <h1 className="text-xl font-bold flex-1 text-white">{isEdit ? 'עריכת מתכון' : 'מתכון חדש'}</h1>
+        <h1 className="text-xl font-bold flex-1 text-white text-right">{isEdit ? 'עריכת מתכון' : 'מתכון חדש'}</h1>
         <button
           onClick={handleSave}
           disabled={saving}
@@ -197,15 +203,15 @@ export default function RecipeFormPage() {
             value={form.name}
             onChange={e => setField('name', e.target.value)}
             placeholder="למשל: פסטה ברוטב עגבניות וריקוטה"
-            dir="auto"
-            className="input-field text-base font-medium"
+            dir={isHebrew ? 'rtl' : 'ltr'}
+            className="input-field text-base font-medium text-right"
           />
         </Field>
 
         {/* Category & Difficulty */}
         <div className="grid grid-cols-2 gap-3">
           <Field label="קטגוריה">
-            <select value={form.category} onChange={e => setField('category', e.target.value)} className="input-field">
+            <select value={form.category} onChange={e => setField('category', e.target.value)} className="input-field text-right">
               <option value="">בחר קטגוריה...</option>
               {['עיקרית', 'קינוח', 'סלט', 'מרק', 'ארוחת בוקר', 'מאפה', 'נשנוש', 'אחר'].map(c => (
                 <option key={c} value={c}>{c}</option>
@@ -213,7 +219,7 @@ export default function RecipeFormPage() {
             </select>
           </Field>
           <Field label="רמת קושי">
-            <select value={form.difficulty} onChange={e => setField('difficulty', e.target.value)} className="input-field">
+            <select value={form.difficulty} onChange={e => setField('difficulty', e.target.value)} className="input-field text-right">
               <option value="easy">קל</option>
               <option value="medium">בינוני</option>
               <option value="hard">מורכב</option>
@@ -244,8 +250,8 @@ export default function RecipeFormPage() {
             onChange={e => setField('description', e.target.value)}
             rows={2}
             placeholder="תיאור כללי, טיפים או הערות חשובות..."
-            dir="auto"
-            className="input-field resize-none text-sm"
+            dir={isHebrew ? 'rtl' : 'ltr'}
+            className="input-field resize-none text-sm text-right"
           />
         </Field>
 
@@ -257,13 +263,14 @@ export default function RecipeFormPage() {
               value={form.source_url || ''}
               onChange={e => setField('source_url', e.target.value)}
               placeholder="https://..."
+              dir="ltr"
               className="input-field pl-9 font-mono text-xs"
             />
           </div>
         </Field>
 
         {/* Section: Ingredients */}
-        <section className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5">
+        <section className="bg-slate-900 border border-slate-800 rounded-3xl p-3 sm:p-5">
           <div className="flex items-center justify-between mb-3">
             <label className="text-base font-bold text-white">מרכיבים</label>
             <div className="flex gap-2">
@@ -279,7 +286,7 @@ export default function RecipeFormPage() {
                 onClick={() => setField('ingredients', [...form.ingredients, { name: '', quantity: '' }])}
                 className="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white flex items-center gap-1 transition-colors"
               >
-                <Plus size={14} /> הוסף
+                <Plus size={14} /> הוסף מצרך
               </button>
             </div>
           </div>
@@ -296,41 +303,51 @@ export default function RecipeFormPage() {
                 onChange={e => setBulkIngText(e.target.value)}
                 placeholder={"2 כוסות קמח\n1 כפית מלח\n100 גרם חמאה"}
                 rows={4}
-                dir="auto"
-                className="input-field text-xs font-mono mb-2"
+                dir="rtl"
+                className="input-field text-xs font-mono mb-2 text-right"
                 autoFocus
               />
               <button
                 type="button"
                 onClick={applyBulkIngredients}
-                className="w-full py-1.5 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition-colors"
+                className="w-full py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition-colors"
               >
                 הוסף מצרכים מהטקסט
               </button>
             </div>
           )}
 
+          {/* Column headers for wide clear layout */}
+          <div className="flex gap-2 text-xs font-semibold text-slate-400 px-1 mb-1.5">
+            <span className="flex-1 text-right">שם המצרך</span>
+            <span className="w-28 sm:w-36 text-center">כמות</span>
+            <span className="w-8"></span>
+          </div>
+
           <div className="space-y-2">
             {form.ingredients.map((ing, i) => (
               <div key={i} className="flex gap-2 items-center">
+                {/* In RTL: Name on right */}
                 <input
                   value={ing.name}
                   onChange={e => setIngredient(i, 'name', e.target.value)}
-                  placeholder="שם המצרך (למשל: קמח)"
-                  dir="auto"
-                  className="input-field flex-1 text-sm"
+                  placeholder="שם המצרך (קמח)"
+                  dir={isHebrew ? 'rtl' : 'ltr'}
+                  className="input-field flex-1 min-w-0 text-sm font-medium text-right"
                 />
+                {/* In RTL: Quantity on left of name */}
                 <input
                   value={ing.quantity}
                   onChange={e => setIngredient(i, 'quantity', e.target.value)}
                   placeholder="כמות (2 כוסות)"
-                  dir="auto"
-                  className="input-field w-28 text-sm text-center"
+                  dir={isHebrew ? 'rtl' : 'ltr'}
+                  className="input-field w-28 sm:w-36 text-sm text-center font-medium flex-shrink-0"
                 />
                 <button
                   type="button"
                   onClick={() => setField('ingredients', form.ingredients.filter((_, j) => j !== i))}
-                  className="text-slate-500 hover:text-red-400 p-2 transition-colors"
+                  className="text-slate-500 hover:text-red-400 p-2 transition-colors flex-shrink-0"
+                  title="מחק מצרך"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -340,7 +357,7 @@ export default function RecipeFormPage() {
         </section>
 
         {/* Section: Steps */}
-        <section className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5">
+        <section className="bg-slate-900 border border-slate-800 rounded-3xl p-3 sm:p-5">
           <div className="flex items-center justify-between mb-3">
             <label className="text-base font-bold text-white">הוראות הכנה</label>
             <div className="flex gap-2">
@@ -373,14 +390,14 @@ export default function RecipeFormPage() {
                 onChange={e => setBulkStepsText(e.target.value)}
                 placeholder={"1. לחמם תנור ל-180 מעלות\n2. לערבב את החומרים היבשים\n3. לאפות במשך 25 דקות"}
                 rows={4}
-                dir="auto"
-                className="input-field text-xs font-mono mb-2"
+                dir="rtl"
+                className="input-field text-xs font-mono mb-2 text-right"
                 autoFocus
               />
               <button
                 type="button"
                 onClick={applyBulkSteps}
-                className="w-full py-1.5 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition-colors"
+                className="w-full py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs font-bold text-white transition-colors"
               >
                 הוסף שלבים מהטקסט
               </button>
@@ -398,8 +415,8 @@ export default function RecipeFormPage() {
                   onChange={e => setStep(i, e.target.value)}
                   placeholder={`שלב ${i + 1}...`}
                   rows={2}
-                  dir="auto"
-                  className="input-field flex-1 resize-none text-sm leading-relaxed"
+                  dir={isHebrew ? 'rtl' : 'ltr'}
+                  className="input-field flex-1 resize-none text-sm leading-relaxed text-right"
                 />
                 <button
                   type="button"
@@ -420,7 +437,7 @@ export default function RecipeFormPage() {
 function Field({ label, children }) {
   return (
     <div>
-      <label className="block text-xs font-bold text-slate-300 mb-1.5">{label}</label>
+      <label className="block text-xs font-bold text-slate-300 mb-1.5 text-right">{label}</label>
       {children}
     </div>
   )
