@@ -26,10 +26,17 @@ def get_api_key() -> str:
     return key
 
 
-def call_gemini_generate(parts: list, timeout: int = 35) -> str:
+def call_gemini_generate(parts: list, timeout: int = 35, temperature: float = 0.1, response_json: bool = True) -> str:
     """Calls the Google Generative Language REST API directly with automatic model fallback."""
     key = get_api_key()
-    payload = json.dumps({"contents": [{"parts": parts}]}).encode("utf-8")
+    gen_config = {"temperature": temperature}
+    if response_json:
+        gen_config["responseMimeType"] = "application/json"
+
+    payload = json.dumps({
+        "contents": [{"parts": parts}],
+        "generationConfig": gen_config,
+    }).encode("utf-8")
     last_error = None
 
     for model_name in MODELS:
@@ -87,28 +94,35 @@ def parse_json_response(text: str) -> dict:
     return json.loads(text)
 
 
-RECIPE_PROMPT = """You are an expert recipe extraction assistant.
-Analyze this recipe image (photo of a cookbook, handwritten recipe, dish with recipe card, or screenshot).
-Extract the recipe details. If the text is in Hebrew, output in Hebrew. If in English, output in English.
+RECIPE_PROMPT = """You are a precision OCR and recipe transcription engine.
+Your task is to accurately transcribe the recipe from the provided image (photo of a cookbook, handwritten note, screenshot, or recipe card).
 
-Return ONLY valid JSON with no markdown formatting, no explanations, no code blocks:
+CRITICAL ACCURACY & FIDELITY RULES:
+1. VERBATIM TRANSCRIPTION: Copy the exact recipe title, ingredients, quantities, and preparation steps exactly as they are written in the image. Do NOT invent, assume, extrapolate, or embellish anything.
+2. RECIPE NAME: Use the EXACT title printed or handwritten on the recipe. If no title is written, name it strictly based on the core visible dish without flowery adjectives.
+3. NO HALLUCINATIONS: Do NOT add ingredients (such as salt, pepper, oil, water) or steps unless they are explicitly written in the image.
+4. QUANTITIES: Preserve exact units, fractions, and phrasing as written (e.g. '1/2 כוס', '200 גרם', 'כף').
+5. LANGUAGE: If the recipe is in Hebrew, output in Hebrew. If in English, output in English. Keep the original wording verbatim without rephrasing or translating.
+6. DESCRIPTION: Only include a description if one is actually printed on the image. Otherwise, return an empty string "". Do NOT invent a description.
+
+Return ONLY a JSON object matching this schema:
 {
-  "name": "Recipe name",
-  "category": "Category (עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר)",
-  "prep_time": 15,
-  "cook_time": 30,
+  "name": "Exact title from image",
+  "category": "עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר",
+  "prep_time": 0,
+  "cook_time": 0,
   "servings": 4,
   "difficulty": "easy",
-  "description": "Short appetizing description",
+  "description": "Verbatim text or empty string",
   "ingredients": [
-    {"name": "ingredient name", "quantity": "amount and unit"}
+    {"name": "ingredient name as written", "quantity": "exact quantity as written"}
   ],
   "steps": [
-    "Step 1 description",
-    "Step 2 description"
+    "Exact step 1 as written",
+    "Exact step 2 as written"
   ]
 }
-If no recipe is visible in the image, return: {"error": "No recipe found in image"}"""
+If no recipe or text is visible, return: {"error": "No recipe found in image"}"""
 
 INGREDIENTS_PROMPT = """You are a recipe suggestion assistant.
 The user has these ingredients: {ingredients}
@@ -126,18 +140,24 @@ Return ONLY valid JSON with no markdown, no explanation:
   ]
 }}"""
 
-URL_PROMPT = """You are an expert recipe extraction assistant. Extract the complete recipe from this webpage content.
-If the webpage text is in Hebrew, output in Hebrew. If in English, output in English.
+URL_PROMPT = """You are a precision recipe extraction engine. Extract the complete recipe faithfully from this webpage content.
 
-Return ONLY valid JSON with no markdown formatting, no explanations, no backticks:
+CRITICAL ACCURACY & FIDELITY RULES:
+1. VERBATIM TRANSCRIPTION: Extract the exact recipe title, ingredients, quantities, and instructions as published on the page. Do NOT invent or add ingredients.
+2. RECIPE NAME: Use the exact title of the recipe as given by the author/website.
+3. QUANTITIES: Preserve exact units and amounts as published.
+4. LANGUAGE: If the webpage text is in Hebrew, output in Hebrew. If in English, output in English.
+5. DESCRIPTION: Short verbatim excerpt or empty string "". Do not invent flowery marketing text.
+
+Return ONLY a JSON object matching this schema:
 {
   "name": "Recipe name",
-  "category": "Category (עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר)",
-  "prep_time": 15,
-  "cook_time": 30,
+  "category": "עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר",
+  "prep_time": 0,
+  "cook_time": 0,
   "servings": 4,
   "difficulty": "easy",
-  "description": "Short description",
+  "description": "Verbatim excerpt or empty string",
   "ingredients": [
     {"name": "ingredient name", "quantity": "amount and unit"}
   ],
