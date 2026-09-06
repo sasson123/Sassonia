@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X, ChevronRight, ChevronLeft, CheckCircle2, Circle,
   ListOrdered, BookOpen, Clock, Play, Pause, RotateCcw,
@@ -67,6 +68,15 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
     }
   }, [])
 
+  // Escape key to close
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose?.()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   // Timer countdown effect
   useEffect(() => {
     if (timerRunning && timerSeconds > 0) {
@@ -132,10 +142,19 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
 
   const checkedCount = Object.values(checkedIngredients).filter(Boolean).length
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col select-none h-dvh overflow-hidden"
+      className="fixed inset-0 z-[9999] bg-slate-950 text-white flex flex-col select-none overflow-hidden"
       dir={isHebrew ? 'rtl' : 'ltr'}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100%',
+        height: '100%'
+      }}
     >
       {/* ── TOP HEADER ────────────────────────────────────────── */}
       <header className="flex-shrink-0 bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2 z-20">
@@ -260,7 +279,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
 
       {/* ── VIEW 1: INGREDIENTS CHECKLIST (DEFAULT FIRST SCREEN) ── */}
       {viewMode === 'ingredients' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {/* Subheader */}
           <div className="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800/70 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
@@ -273,7 +292,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
             </div>
             <button
               onClick={toggleAllIngredients}
-              className="text-xs font-medium text-slate-400 hover:text-sky-400 flex items-center gap-1 transition-colors"
+              className="text-xs font-medium text-slate-400 hover:text-sky-400 flex items-center gap-1 transition-colors cursor-pointer"
             >
               <CheckCheck size={14} />
               <span>{checkedCount === scaledIngredients.length ? 'בטל הכל' : 'סמן הכל'}</span>
@@ -281,7 +300,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           </div>
 
           {/* Scrollable Checklist */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-2 max-w-2xl mx-auto w-full">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5 space-y-2 max-w-2xl mx-auto w-full">
             {scaledIngredients.map((ing, idx) => {
               const isChecked = checkedIngredients[idx]
               return (
@@ -322,14 +341,17 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           </div>
 
           {/* Fixed Sticky Bottom Action Bar — Always visible, safe padding */}
-          <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800 p-4 pb-8 sm:pb-4 z-30 shadow-2xl">
+          <div
+            className="flex-shrink-0 bg-slate-900 border-t border-slate-800 p-4 pb-8 sm:pb-4 z-30 shadow-2xl"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 28px), 28px)' }}
+          >
             <div className="max-w-2xl mx-auto w-full">
               <button
                 onClick={() => {
                   setViewMode('step')
                   setCurrentStep(0)
                 }}
-                className="w-full py-4 px-6 rounded-2xl font-bold text-base bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white flex items-center justify-center gap-3 shadow-xl shadow-sky-600/30 transition-all"
+                className="w-full py-4 px-6 rounded-2xl font-bold text-base bg-sky-600 hover:bg-sky-500 active:scale-[0.98] text-white flex items-center justify-center gap-3 shadow-xl shadow-sky-600/30 transition-all cursor-pointer"
               >
                 <span>התחל בהכנת המתכון (מעבר לשלב 1)</span>
                 {isHebrew ? <ChevronLeft size={22} /> : <ChevronRight size={22} />}
@@ -341,7 +363,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
 
       {/* ── VIEW 2: STEP-BY-STEP (PAGINATED WITH UNHIDDEN STICKY FOOTER) ── */}
       {viewMode === 'step' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {/* Step Progress bar */}
           <div className="px-4 py-2.5 bg-slate-900/60 border-b border-slate-800/70 flex-shrink-0">
             <div className="max-w-2xl mx-auto">
@@ -359,17 +381,17 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           </div>
 
           {/* Middle Step Card (Scrollable internally if text is long) */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col justify-center max-w-2xl mx-auto w-full">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 pb-6 flex flex-col justify-center max-w-2xl mx-auto w-full">
             <div
               onClick={() => toggleStep(currentStep)}
-              className={`p-6 sm:p-8 rounded-3xl cursor-pointer border transition-all my-auto shadow-2xl ${
+              className={`p-5 sm:p-8 rounded-3xl cursor-pointer border transition-all my-auto shadow-2xl ${
                 completedSteps[currentStep]
                   ? 'bg-slate-900/60 border-emerald-500/50 text-slate-400'
                   : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-white'
               }`}
             >
               {/* Step Status Badge */}
-              <div className="mb-5 flex justify-center">
+              <div className="mb-4 sm:mb-5 flex justify-center">
                 {completedSteps[currentStep] ? (
                   <span className="flex items-center gap-1.5 text-emerald-400 text-xs sm:text-sm font-bold bg-emerald-950/80 px-3.5 py-1.5 rounded-full border border-emerald-800/60">
                     <CheckCircle2 size={18} /> הושלם (לחץ לביטול)
@@ -389,13 +411,16 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           </div>
 
           {/* Fixed Sticky Bottom Navigation Bar — GUARANTEED VISIBLE, SAFE PADDING */}
-          <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800 p-4 pb-8 sm:pb-4 z-30 shadow-2xl">
+          <div
+            className="flex-shrink-0 bg-slate-900 border-t border-slate-800 p-4 pb-8 sm:pb-4 z-30 shadow-2xl"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 28px), 28px)' }}
+          >
             <div className="flex items-center justify-between gap-3 max-w-2xl mx-auto w-full">
               {/* Previous Step Button */}
               <button
                 onClick={() => setCurrentStep(s => Math.max(0, s - 1))}
                 disabled={currentStep === 0}
-                className="flex-1 py-4 px-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none rounded-2xl flex items-center justify-center gap-2 text-base font-bold text-white transition-all border border-slate-700"
+                className="flex-1 py-4 px-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none rounded-2xl flex items-center justify-center gap-2 text-base font-bold text-white transition-all border border-slate-700 cursor-pointer"
               >
                 {isHebrew ? <ChevronRight size={22} /> : <ChevronLeft size={22} />}
                 <span>הקודם</span>
@@ -404,7 +429,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
               {/* Quick Jump to Ingredients */}
               <button
                 onClick={() => setViewMode('ingredients')}
-                className="p-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] rounded-2xl text-slate-300 hover:text-white transition-colors border border-slate-700 flex items-center justify-center"
+                className="p-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] rounded-2xl text-slate-300 hover:text-white transition-colors border border-slate-700 flex items-center justify-center cursor-pointer"
                 title="הצג מצרכים"
               >
                 <BookOpen size={20} />
@@ -418,7 +443,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
                     setCurrentStep(s => s + 1)
                   }
                 }}
-                className={`flex-1 py-4 px-4 rounded-2xl flex items-center justify-center gap-2 text-base font-bold active:scale-[0.98] transition-all shadow-lg ${
+                className={`flex-1 py-4 px-4 rounded-2xl flex items-center justify-center gap-2 text-base font-bold active:scale-[0.98] transition-all shadow-lg cursor-pointer ${
                   currentStep === totalSteps - 1
                     ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30'
                     : 'bg-sky-600 hover:bg-sky-500 text-white shadow-sky-600/30'
@@ -434,8 +459,8 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
 
       {/* ── VIEW 3: FULL SCROLLABLE LIST ───────────────────────── */}
       {viewMode === 'list' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-2xl mx-auto w-full space-y-3">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 pb-6 max-w-2xl mx-auto w-full space-y-3">
             {steps.map((step, idx) => {
               const isDone = completedSteps[idx]
               return (
@@ -469,18 +494,21 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           </div>
 
           {/* Sticky footer */}
-          <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800 p-4 pb-8 sm:pb-4 z-30 shadow-2xl">
+          <div
+            className="flex-shrink-0 bg-slate-900 border-t border-slate-800 p-4 pb-8 sm:pb-4 z-30 shadow-2xl"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 28px), 28px)' }}
+          >
             <div className="max-w-2xl mx-auto flex gap-3">
               <button
                 onClick={() => setViewMode('ingredients')}
-                className="flex-1 py-3.5 bg-slate-800 hover:bg-slate-700 rounded-2xl font-bold text-sm text-slate-200 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3.5 bg-slate-800 hover:bg-slate-700 rounded-2xl font-bold text-sm text-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <BookOpen size={18} />
                 <span>צפה במצרכים</span>
               </button>
               <button
                 onClick={() => setViewMode('step')}
-                className="flex-1 py-3.5 bg-sky-600 hover:bg-sky-500 rounded-2xl font-bold text-sm text-white transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3.5 bg-sky-600 hover:bg-sky-500 rounded-2xl font-bold text-sm text-white transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <ChefHat size={18} />
                 <span>מעבר לשלב-שלב</span>
@@ -527,6 +555,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }

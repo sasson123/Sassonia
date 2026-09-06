@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit, Trash2, ShoppingCart, Clock, Users,
@@ -373,7 +374,7 @@ export default function RecipeDetailPage() {
       )}
 
       {/* Fullscreen Original Photo Lightbox Modal */}
-      {showImageModal && recipe.image_path && (
+      {showImageModal && recipe.image_path && createPortal(
         <div
           className="fixed inset-0 z-[120] bg-black/95 flex flex-col backdrop-blur-md animate-fadeIn select-none"
           onClick={() => setShowImageModal(false)}
@@ -418,7 +419,8 @@ export default function RecipeDetailPage() {
           <div className="p-3 text-center text-xs text-slate-400 flex-shrink-0 bg-slate-950/80 border-t border-slate-800">
             ניתן להגדיל (Pinch to zoom) • לחץ על התמונה או על ה-X לסגירה
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
