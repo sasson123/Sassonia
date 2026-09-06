@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, Trash2, ShoppingCart, CheckCircle, Circle, GripVertical, ClipboardList, X, Loader2 } from 'lucide-react'
+import { Plus, Trash2, ShoppingCart, CheckCircle, Circle, GripVertical, ClipboardList, X, Loader2, BookMarked } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, DragOverlay
@@ -11,6 +11,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { shopping as shoppingApi } from '../api'
 import { getCachedItems, cacheItems, removeCachedItems, enqueue, getQueueLength, flush } from '../offlineSync'
+import BaseListModal from './BaseListModal'
 
 function parsePastedList(text) {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean)
@@ -133,6 +134,7 @@ export default function ShoppingPage() {
   const [activeId, setActiveId] = useState(null)
   const [showNewList, setShowNewList] = useState(false)
   const [newListName, setNewListName] = useState('')
+  const [showBaseModal, setShowBaseModal] = useState(false)
   const [confirm, setConfirm] = useState(null) // { message, onConfirm }
   const [syncing, setSyncing] = useState(() => getQueueLength() > 0)
   const [activeTabId, setActiveTabId] = useState(null)
@@ -372,6 +374,13 @@ export default function ShoppingPage() {
               </button>
             )}
             <button
+              onClick={() => setShowBaseModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+              title="רשימת בסיס ואיפוס"
+            >
+              <BookMarked size={16} className="text-emerald-400" /> רשימת בסיס
+            </button>
+            <button
               onClick={() => { setShowPaste(v => !v); setPasteText('') }}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${showPaste ? 'bg-sky-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
               title="Paste list"
@@ -529,6 +538,14 @@ export default function ShoppingPage() {
           </>
         )}
       </div>
+
+      <BaseListModal
+        isOpen={showBaseModal}
+        onClose={() => setShowBaseModal(false)}
+        activeList={activeList}
+        onResetDone={(newItems) => setItemsCached(newItems)}
+      />
     </div>
   )
 }
+

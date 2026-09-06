@@ -47,3 +47,12 @@ def run_migrations():
             ))
             conn.execute(text("INSERT INTO shopping_lists (name, position) VALUES ('סופר', 0)"))
             conn.commit()
+
+        if "base_list_items" not in tables:
+            conn.execute(text(
+                "CREATE TABLE base_list_items "
+                "(id INTEGER PRIMARY KEY, list_name TEXT NOT NULL, name TEXT NOT NULL, "
+                "quantity TEXT DEFAULT '', \"order\" INTEGER DEFAULT 0, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+            ))
+            conn.commit()

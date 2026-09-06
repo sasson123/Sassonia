@@ -173,3 +173,124 @@ def delete_item(item_id: int, db: Session = Depends(get_db)):
     db.delete(item)
     db.commit()
     return {"ok": True}
+
+
+# ── Base List ─────────────────────────────────────────────────────
+
+def base_item_to_dict(item: models.BaseListItem) -> dict:
+    return {
+        "id": item.id,
+        "list_name": item.list_name,
+        "name": item.name,
+        "quantity": item.quantity,
+        "order": item.order,
+    }
+
+
+class BaseItemCreate(BaseModel):
+    list_name: str = "סופר"
+    name: str
+    quantity: str = ""
+
+
+@router.get("/base-items")
+def get_base_items(list_name: str = "סופר", db: Session = Depends(get_db)):
+    items = (
+        db.query(models.BaseListItem)
+        .filter(models.BaseListItem.list_name == list_name)
+        .order_by(models.BaseListItem.order, models.BaseListItem.id)
+        .all()
+    )
+    return [base_item_to_dict(i) for i in items]
+
+
+@router.post("/base-items")
+def add_base_item(item: BaseItemCreate, db: Session = Depends(get_db)):
+    count = db.query(models.BaseListItem).filter(models.BaseListItem.list_name == item.list_name).count()
+    db_item = models.BaseListItem(list_name=item.list_name, name=item.name, quantity=item.quantity, order=count)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return base_item_to_dict(db_item)
+
+
+@router.post("/base-items/bulk")
+def add_base_items_bulk(items: List[BaseItemCreate], db: Session = Depends(get_db)):
+    if not items:
+        return []
+    list_name = items[0].list_name
+    base_order = db.query(models.BaseListItem).filter(models.BaseListItem.list_name == list_name).count()
+    created = []
+    for i, item in enumerate(items):
+        db_item = models.BaseListItem(list_name=item.list_name, name=item.name, quantity=item.quantity, order=base_order + i)
+        db.add(db_item)
+        created.append(db_item)
+    db.commit()
+    return [base_item_to_dict(i) for i in created]
+
+
+@router.delete("/base-items/{item_id}")
+def delete_base_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.BaseListItem).filter(models.BaseListItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Base item not found")
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
+
+
+class ResetFromBaseRequest(BaseModel):
+    list_name: str = "סופר"
+
+
+@router.post("/reset-from-base")
+def reset_from_base(req: ResetFromBaseRequest, db: Session = Depends(get_db)):
+    """Delete ALL current items in the list and replace with base items (all unchecked)."""
+    list_name = req.list_name
+    base_items = (
+        db.query(models.BaseListItem)
+        .filter(models.BaseListItem.list_name == list_name)
+        .order_by(models.BaseListItem.order, models.BaseListItem.id)
+        .all()
+    )
+    # Delete existing
+    db.query(models.ShoppingItem).filter(models.ShoppingItem.list_name == list_name).delete()
+    # Insert base items as fresh, unchecked
+    created = []
+    for i, base in enumerate(base_items):
+        db_item = models.ShoppingItem(name=base.name, quantity=base.quantity, checked=False, order=i, list_name=list_name)
+        db.add(db_item)
+        created.append(db_item)
+    db.commit()
+    return [item_to_dict(i) for i in created]
+
+
+@router.post("/add-base-to-existing")
+def add_base_to_existing(req: ResetFromBaseRequest, db: Session = Depends(get_db)):
+    """Add base items that don't already exist (by name) to the current list."""
+    list_name = req.list_name
+    base_items = (
+        db.query(models.BaseListItem)
+        .filter(models.BaseListItem.list_name == list_name)
+        .order_by(models.BaseListItem.order, models.BaseListItem.id)
+        .all()
+    )
+    existing_names = {
+        i.name.strip().lower()
+        for i in db.query(models.ShoppingItem).filter(models.ShoppingItem.list_name == list_name).all()
+    }
+    start_order = db.query(models.ShoppingItem).filter(models.ShoppingItem.list_name == list_name).count()
+    added = 0
+    for base in base_items:
+        if base.name.strip().lower() not in existing_names:
+            db_item = models.ShoppingItem(name=base.name, quantity=base.quantity, checked=False, order=start_order + added, list_name=list_name)
+            db.add(db_item)
+            added += 1
+    db.commit()
+    all_items = (
+        db.query(models.ShoppingItem)
+        .filter(models.ShoppingItem.list_name == list_name)
+        .order_by(models.ShoppingItem.checked, models.ShoppingItem.order, models.ShoppingItem.id)
+        .all()
+    )
+    return [item_to_dict(i) for i in all_items]

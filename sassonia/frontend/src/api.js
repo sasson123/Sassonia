@@ -29,6 +29,13 @@ export const shopping = {
   clearChecked: (listName) => api.delete('/shopping/checked/clear', { params: { list_name: listName } }).then(r => r.data),
   reorder: (order) => api.post('/shopping/reorder', { order }).then(r => r.data),
   reorderLists: (order) => api.post('/shopping/lists/reorder', { order }).then(r => r.data),
+  // Base list
+  getBaseItems: (listName) => api.get('/shopping/base-items', { params: { list_name: listName } }).then(r => r.data),
+  addBaseItem: (data) => api.post('/shopping/base-items', data).then(r => r.data),
+  addBaseItemsBulk: (items) => api.post('/shopping/base-items/bulk', items).then(r => r.data),
+  deleteBaseItem: (id) => api.delete(`/shopping/base-items/${id}`).then(r => r.data),
+  resetFromBase: (listName) => api.post('/shopping/reset-from-base', { list_name: listName }).then(r => r.data),
+  addBaseToExisting: (listName) => api.post('/shopping/add-base-to-existing', { list_name: listName }).then(r => r.data),
 }
 
 export const tasks = {

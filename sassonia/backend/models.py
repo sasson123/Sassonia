@@ -42,6 +42,17 @@ class ShoppingItem(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class BaseListItem(Base):
+    __tablename__ = "base_list_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    list_name = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    quantity = Column(String, default="")
+    order = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
