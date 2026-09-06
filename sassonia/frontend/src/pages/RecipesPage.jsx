@@ -45,7 +45,7 @@ export default function RecipesPage() {
     try {
       const data = await gemini.extractRecipe(file)
       setShowAddModal(false)
-      navigate('/recipes/new', { state: { prefill: data } })
+      navigate('/recipes/new', { state: { prefill: data, imageFile: file } })
     } catch (err) {
       const detail = err?.response?.data?.detail
       setError(detail ? `הסריקה נכשלה: ${detail}` : 'לא הצלחנו לחלץ מתכון מהתמונה. נסה תמונה ברורה יותר.')

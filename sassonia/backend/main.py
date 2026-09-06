@@ -31,7 +31,7 @@ os.makedirs(IMAGES_DIR, exist_ok=True)
 
 app.mount("/api/images", StaticFiles(directory=IMAGES_DIR), name="images")
 
-APP_VERSION = "1.3.6"
+APP_VERSION = "1.3.7"
 
 @app.get("/api/version")
 async def get_version():

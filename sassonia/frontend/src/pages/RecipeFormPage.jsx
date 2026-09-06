@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Plus, Trash2, Save, Camera, Loader2, ClipboardList, Link as LinkIcon, X } from 'lucide-react'
 import { recipes as recipesApi } from '../api'
+import { compressImage } from '../compressImage'
 
 function parsePastedIngredients(text) {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean)
@@ -60,6 +61,10 @@ export default function RecipeFormPage() {
         steps: p.steps?.length ? p.steps : EMPTY.steps,
       })
       if (p.image_url) setImagePreview(p.image_url)
+      if (location.state.imageFile) {
+        setImageFile(location.state.imageFile)
+        setImagePreview(URL.createObjectURL(location.state.imageFile))
+      }
     } else if (isEdit) {
       recipesApi.get(id).then(r => {
         setForm({
@@ -152,7 +157,8 @@ export default function RecipeFormPage() {
         ? await recipesApi.update(id, payload)
         : await recipesApi.create(payload)
       if (imageFile) {
-        await recipesApi.uploadImage(saved.id, imageFile)
+        const optimized = await compressImage(imageFile)
+        await recipesApi.uploadImage(saved.id, optimized)
       }
       navigate(`/recipes/${saved.id}`)
     } finally {

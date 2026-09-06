@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit, Trash2, ShoppingCart, Clock, Users,
-  ChefHat, CheckCircle2, Circle, Flame, ExternalLink, Plus, Minus, Check
+  ChefHat, CheckCircle2, Circle, Flame, ExternalLink, Plus, Minus, Check,
+  Image as ImageIcon, ZoomIn, X
 } from 'lucide-react'
 import { recipes as recipesApi, shopping } from '../api'
 import CookingModeModal from './CookingModeModal'
@@ -49,6 +50,7 @@ export default function RecipeDetailPage() {
   const [shoppingLists, setShoppingLists] = useState([])
   const [selectedList, setSelectedList] = useState('סופר')
   const [showListSelector, setShowListSelector] = useState(false)
+  const [showImageModal, setShowImageModal] = useState(false)
 
   useEffect(() => {
     recipesApi.get(id).then(r => {
@@ -116,13 +118,28 @@ export default function RecipeDetailPage() {
       {/* Top Hero Image & Actions */}
       <div className="relative">
         {recipe.image_path ? (
-          <img src={recipe.image_path} alt={recipe.name} className="w-full h-64 object-cover" />
+          <div
+            onClick={() => setShowImageModal(true)}
+            className="w-full h-64 relative cursor-pointer group overflow-hidden"
+            title="לחץ להגדלת צילום המתכון המקורי"
+          >
+            <img
+              src={recipe.image_path}
+              alt={recipe.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+            {/* Zoom hint badge */}
+            <div className="absolute top-4 start-16 bg-slate-900/80 backdrop-blur px-3 py-1.5 rounded-full text-xs font-semibold text-slate-200 hover:text-white flex items-center gap-1.5 border border-slate-700 shadow-md">
+              <ZoomIn size={14} className="text-sky-400" />
+              <span>צילום מקורי</span>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-64 bg-slate-800 flex items-center justify-center">
             <ChefHat size={64} className="text-slate-600" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none" />
 
         {/* Back button */}
         <button
@@ -163,7 +180,7 @@ export default function RecipeDetailPage() {
         </div>
 
         {/* Title & Metadata over Hero bottom */}
-        <div className="absolute bottom-4 left-4 right-4">
+        <div className="absolute bottom-4 left-4 right-4 pointer-events-none">
           <h1 dir="auto" className="text-2xl sm:text-3xl font-extrabold text-white mb-2 drop-shadow-md">
             {recipe.name}
           </h1>
@@ -196,6 +213,17 @@ export default function RecipeDetailPage() {
           <Flame size={24} className="animate-bounce" />
           <span>מצב הכנה (מסך דולק קבוע)</span>
         </button>
+
+        {/* View Original Recipe Photo Button if available */}
+        {recipe.image_path && (
+          <button
+            onClick={() => setShowImageModal(true)}
+            className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 border border-slate-800 transition-colors shadow-sm active:scale-[0.99]"
+          >
+            <ImageIcon size={18} className="text-sky-400" />
+            <span>צפה בצילום המתכון המקורי (ספר / פתק)</span>
+          </button>
+        )}
 
         {recipe.description && (
           <p dir="auto" className="text-slate-300 text-sm leading-relaxed bg-slate-900/60 p-4 rounded-2xl border border-slate-800/80">
@@ -342,6 +370,55 @@ export default function RecipeDetailPage() {
           scaledIngredients={scaledIngredients}
           onClose={() => setCookingMode(false)}
         />
+      )}
+
+      {/* Fullscreen Original Photo Lightbox Modal */}
+      {showImageModal && recipe.image_path && (
+        <div
+          className="fixed inset-0 z-[120] bg-black/95 flex flex-col backdrop-blur-md animate-fadeIn select-none"
+          onClick={() => setShowImageModal(false)}
+          dir="rtl"
+        >
+          {/* Lightbox Header */}
+          <div
+            className="flex items-center justify-between p-4 border-b border-slate-800 flex-shrink-0 bg-slate-950/80"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 flex-shrink-0">
+                <ImageIcon size={18} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-sm sm:text-base text-white truncate">{recipe.name}</h3>
+                <p className="text-xs text-slate-400">צילום המתכון המקורי</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors flex-shrink-0"
+              title="סגור"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Lightbox Image Viewport */}
+          <div
+            className="flex-1 overflow-auto flex items-center justify-center p-2 sm:p-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <img
+              src={recipe.image_path}
+              alt={recipe.name}
+              className="max-h-[85vh] max-w-full object-contain rounded-2xl shadow-2xl"
+            />
+          </div>
+
+          {/* Lightbox Footer hint */}
+          <div className="p-3 text-center text-xs text-slate-400 flex-shrink-0 bg-slate-950/80 border-t border-slate-800">
+            ניתן להגדיל (Pinch to zoom) • לחץ על התמונה או על ה-X לסגירה
+          </div>
+        </div>
       )}
     </div>
   )

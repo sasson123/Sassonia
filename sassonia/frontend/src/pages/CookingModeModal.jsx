@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   X, ChevronRight, ChevronLeft, CheckCircle2, Circle,
   ListOrdered, BookOpen, Clock, Play, Pause, RotateCcw,
-  CheckCheck, ChefHat
+  CheckCheck, ChefHat, Image as ImageIcon
 } from 'lucide-react'
 
 export default function CookingModeModal({ recipe, scaledIngredients = [], onClose }) {
@@ -12,6 +12,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
   const [completedSteps, setCompletedSteps] = useState({})
   const [checkedIngredients, setCheckedIngredients] = useState({})
   const [wakeLockActive, setWakeLockActive] = useState(false)
+  const [showOriginalPhoto, setShowOriginalPhoto] = useState(false)
 
   // Timer state
   const [timerSeconds, setTimerSeconds] = useState(0)
@@ -210,6 +211,18 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
             <Clock size={14} />
             {timerSeconds > 0 && <span className="font-mono text-[11px]">{formatTime(timerSeconds)}</span>}
           </button>
+
+          {/* Original Photo button */}
+          {recipe.image_path && (
+            <button
+              onClick={() => setShowOriginalPhoto(true)}
+              className="px-2 py-1.5 rounded-lg flex items-center gap-1 transition-colors text-amber-400 hover:text-amber-300 hover:bg-slate-800"
+              title="צפה בצילום המקורי"
+            >
+              <ImageIcon size={14} />
+              <span className="hidden sm:inline text-[11px]">מקור</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -473,6 +486,44 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
                 <span>מעבר לשלב-שלב</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Original Photo Lightbox inside Cooking Mode */}
+      {showOriginalPhoto && recipe.image_path && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 flex flex-col backdrop-blur-md animate-fadeIn select-none"
+          onClick={() => setShowOriginalPhoto(false)}
+          dir="rtl"
+        >
+          <div
+            className="flex items-center justify-between p-4 border-b border-slate-800 flex-shrink-0 bg-slate-950/90"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <ImageIcon size={18} className="text-amber-400" />
+              <span className="font-bold text-sm text-white">צילום מקורי — {recipe.name}</span>
+            </div>
+            <button
+              onClick={() => setShowOriginalPhoto(false)}
+              className="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div
+            className="flex-1 overflow-auto flex items-center justify-center p-2 sm:p-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <img
+              src={recipe.image_path}
+              alt={recipe.name}
+              className="max-h-[85vh] max-w-full object-contain rounded-2xl shadow-2xl"
+            />
+          </div>
+          <div className="p-3 text-center text-xs text-slate-400 flex-shrink-0 bg-slate-950/90 border-t border-slate-800">
+            לחץ בכל מקום או על ה-X לחזרה לבישול
           </div>
         </div>
       )}
