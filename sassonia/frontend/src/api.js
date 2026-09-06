@@ -36,6 +36,7 @@ export const shopping = {
   deleteBaseItem: (id) => api.delete(`/shopping/base-items/${id}`).then(r => r.data),
   resetFromBase: (listName) => api.post('/shopping/reset-from-base', { list_name: listName }).then(r => r.data),
   addBaseToExisting: (listName) => api.post('/shopping/add-base-to-existing', { list_name: listName }).then(r => r.data),
+  copyToBase: (sourceList, targetList) => api.post('/shopping/copy-to-base', { source_list: sourceList, target_list: targetList }).then(r => r.data),
 }
 
 export const tasks = {

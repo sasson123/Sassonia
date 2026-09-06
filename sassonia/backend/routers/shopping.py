@@ -294,3 +294,38 @@ def add_base_to_existing(req: ResetFromBaseRequest, db: Session = Depends(get_db
         .all()
     )
     return [item_to_dict(i) for i in all_items]
+
+
+class CopyToBaseRequest(BaseModel):
+    source_list: str = "סופר קבוע"
+    target_list: str = "סופר"
+
+
+@router.post("/copy-to-base")
+def copy_to_base(req: CopyToBaseRequest, db: Session = Depends(get_db)):
+    """Wipes target base list and copies items from source shopping list."""
+    db.query(models.BaseListItem).filter(models.BaseListItem.list_name == req.target_list).delete()
+    source_items = (
+        db.query(models.ShoppingItem)
+        .filter(models.ShoppingItem.list_name == req.source_list)
+        .order_by(models.ShoppingItem.order, models.ShoppingItem.id)
+        .all()
+    )
+    seen = set()
+    created = []
+    for item in source_items:
+        name_clean = item.name.strip()
+        if not name_clean or name_clean in seen:
+            continue
+        seen.add(name_clean)
+        base_item = models.BaseListItem(
+            list_name=req.target_list,
+            name=name_clean,
+            quantity=item.quantity or "",
+            order=len(created)
+        )
+        db.add(base_item)
+        created.append(base_item)
+    db.commit()
+    return [base_item_to_dict(i) for i in created]
+

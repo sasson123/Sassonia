@@ -56,3 +56,20 @@ def run_migrations():
                 "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
             ))
             conn.commit()
+
+        # Seed base_list_items from 'סופר קבוע' if empty or corrupted
+        has_valid_base = conn.execute(text("SELECT COUNT(*) FROM base_list_items WHERE list_name = 'סופר' AND name NOT LIKE '%Ã%'")).scalar()
+        if not has_valid_base or has_valid_base == 0:
+            conn.execute(text("DELETE FROM base_list_items"))
+            conn.execute(text(
+                "INSERT INTO base_list_items (list_name, name, quantity, \"order\") "
+                "SELECT 'סופר', name, quantity, \"order\" FROM shopping_items WHERE list_name = 'סופר קבוע' "
+                "GROUP BY name ORDER BY \"order\""
+            ))
+            conn.execute(text(
+                "INSERT INTO base_list_items (list_name, name, quantity, \"order\") "
+                "SELECT 'סופר קבוע', name, quantity, \"order\" FROM shopping_items WHERE list_name = 'סופר קבוע' "
+                "GROUP BY name ORDER BY \"order\""
+            ))
+            conn.commit()
+
