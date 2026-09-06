@@ -31,12 +31,30 @@ os.makedirs(IMAGES_DIR, exist_ok=True)
 
 app.mount("/api/images", StaticFiles(directory=IMAGES_DIR), name="images")
 
+APP_VERSION = "1.3.2"
+
+@app.get("/api/version")
+async def get_version():
+    return {
+        "version": APP_VERSION,
+        "name": "Sassonia",
+    }
+
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 
 if os.path.exists(STATIC_DIR):
+    NO_CACHE_HEADERS = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         file_path = os.path.join(STATIC_DIR, full_path)
         if full_path and os.path.isfile(file_path):
+            filename = os.path.basename(file_path)
+            if filename in ("sw.js", "manifest.json", "index.html"):
+                return FileResponse(file_path, headers=NO_CACHE_HEADERS)
             return FileResponse(file_path)
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"), headers=NO_CACHE_HEADERS)
