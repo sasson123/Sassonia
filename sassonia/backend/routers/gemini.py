@@ -80,6 +80,7 @@ def call_gemini_generate(parts: list, timeout: int = 35, temperature: float = 0.
 
 
 def parse_json_response(text: str) -> dict:
+    """Parses JSON from Gemini response with multi-stage syntax repair and regex fallback."""
     text = text.strip()
     if "```" in text:
         parts = text.split("```")
@@ -91,6 +92,100 @@ def parse_json_response(text: str) -> dict:
             if part.startswith("{"):
                 text = part
                 break
+
+    # Stage 1: Direct JSON parse
+    try:
+        return json.loads(text, strict=False)
+    except Exception:
+        pass
+
+    # Stage 2: Fix trailing commas and Hebrew abbreviation quotes (e.g. תפו"א -> תפו״א, ק"ג -> ק״ג)
+    fixed = re.sub(r'([\u0590-\u05FFa-zA-Z0-9])"([\u0590-\u05FFa-zA-Z0-9])', r'\1״\2', text)
+    fixed = re.sub(r',\s*([}\]])', r'\1', fixed)
+    try:
+        return json.loads(fixed, strict=False)
+    except Exception:
+        pass
+
+    # Stage 3: Escape internal unescaped quotes line-by-line
+    lines = []
+    for line in fixed.splitlines():
+        # Key-value line: "key": "val with "inner" quotes",
+        m = re.match(r'^(\s*"[^"]+"\s*:\s*")(.*)("[,]?\s*)$', line)
+        if m:
+            prefix, val, suffix = m.group(1), m.group(2), m.group(3)
+            val_clean = re.sub(r'(?<!\\)"', r'\"', val)
+            lines.append(prefix + val_clean + suffix)
+            continue
+        # Array string line: "val with "inner" quotes",
+        m2 = re.match(r'^(\s*")(.*)("[,]?\s*)$', line)
+        if m2 and not re.match(r'^\s*"[^"]+"\s*:', line):
+            prefix, val, suffix = m2.group(1), m2.group(2), m2.group(3)
+            val_clean = re.sub(r'(?<!\\)"', r'\"', val)
+            lines.append(prefix + val_clean + suffix)
+            continue
+        lines.append(line)
+
+    fixed_lines = '\n'.join(lines)
+    fixed_lines = re.sub(r',\s*([}\]])', r'\1', fixed_lines)
+    try:
+        return json.loads(fixed_lines, strict=False)
+    except Exception:
+        pass
+
+    # Stage 4: Fallback regex extractor for recipe schema
+    res = {
+        "name": "",
+        "category": "עיקרית",
+        "prep_time": 0,
+        "cook_time": 0,
+        "servings": 4,
+        "difficulty": "easy",
+        "description": "",
+        "ingredients": [],
+        "steps": []
+    }
+
+    name_m = re.search(r'"name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', text)
+    if name_m:
+        res["name"] = name_m.group(1).replace('\\"', '"')
+
+    cat_m = re.search(r'"category"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', text)
+    if cat_m:
+        res["category"] = cat_m.group(1)
+
+    desc_m = re.search(r'"description"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', text)
+    if desc_m:
+        res["description"] = desc_m.group(1).replace('\\"', '"')
+
+    # Extract ingredients: objects with name and quantity
+    ing_matches = re.finditer(
+        r'\{[^{}]*?"name"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"[^{}]*?(?:"quantity"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)")?[^{}]*?\}',
+        text
+    )
+    for im in ing_matches:
+        iname = im.group(1).replace('\\"', '"').strip()
+        iqty = (im.group(2) or "").replace('\\"', '"').strip()
+        if iname:
+            res["ingredients"].append({"name": iname, "quantity": iqty})
+
+    # Extract steps array strings
+    steps_block = re.search(r'"steps"\s*:\s*\[([\s\S]*?)\]\s*[,}]', text)
+    if steps_block:
+        step_items = re.finditer(r'"([^"\\]*(?:\\.[^"\\]*)*)"', steps_block.group(1))
+        for sm in step_items:
+            s_text = sm.group(1).replace('\\"', '"').strip()
+            if s_text:
+                res["steps"].append(s_text)
+
+    if res["ingredients"] or res["steps"] or res["name"]:
+        logger.warning(
+            "JSON parse failed, recovered recipe via regex fallback (name=%s, %d ingredients, %d steps)",
+            res["name"], len(res["ingredients"]), len(res["steps"])
+        )
+        return res
+
+    # If all recovery attempts failed, re-raise original json.loads error
     return json.loads(text)
 
 
@@ -267,6 +362,7 @@ Rules:
 - If the text is in Hebrew, output all text fields in Hebrew. If in English, output in English.
 - category must be ONE of: עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר
 - difficulty must be ONE of: easy / medium / hard
+- JSON SAFETY: Output strictly valid JSON. NEVER include unescaped double quotes inside string values. For Hebrew abbreviations (such as תפו"א, ק"ג, א"א) use gershayim (תפו״א, ק״ג) or single quotes (תפו'א) or full words. Do not add trailing commas.
 
 Return ONLY a JSON object matching this schema — no markdown, no backticks, no explanation:
 {
