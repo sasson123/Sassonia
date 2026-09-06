@@ -1,4 +1,4 @@
-const CACHE = 'sassonia-v1.3.9'
+const CACHE = 'sassonia-v1.3.10'
 const PRECACHE = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png']
 
 self.addEventListener('install', e => {

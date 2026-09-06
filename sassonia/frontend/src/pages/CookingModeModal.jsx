@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   X, ChevronRight, ChevronLeft, CheckCircle2, Circle,
   ListOrdered, BookOpen, Clock, Play, Pause, RotateCcw,
-  CheckCheck, ChefHat, Image as ImageIcon
+  CheckCheck, ChefHat, Image as ImageIcon, BellRing, VolumeX
 } from 'lucide-react'
 
 export default function CookingModeModal({ recipe, scaledIngredients = [], onClose }) {
@@ -19,7 +19,11 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [timerRunning, setTimerRunning] = useState(false)
   const [showTimer, setShowTimer] = useState(false)
+  const [timerAlarming, setTimerAlarming] = useState(false)
   const timerRef = useRef(null)
+  const alarmIntervalRef = useRef(null)
+  const alarmTimeoutRef = useRef(null)
+  const audioCtxRef = useRef(null)
 
   const steps = recipe.steps || []
   const totalSteps = steps.length
@@ -77,6 +81,97 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
+  // High-penetration acoustic kitchen alarm (triangle wave with harmonics at 1046Hz -> 1318Hz)
+  function playAlarmBurst() {
+    try {
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)()
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume()
+      }
+      const ctx = audioCtxRef.current
+      const now = ctx.currentTime
+
+      // 4 piercing beeps pattern
+      const beeps = [0, 0.12, 0.24, 0.36]
+
+      beeps.forEach((offset, idx) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+
+        // Triangle waveform produces rich harmonics that cut through noisy kitchens
+        osc.type = 'triangle'
+        // High frequencies: 1046.5Hz (C6) and final high alert 1318.5Hz (E6)
+        osc.frequency.setValueAtTime(idx === 3 ? 1318.51 : 1046.5, now + offset)
+
+        // Punchy attack & fast release
+        gain.gain.setValueAtTime(0.001, now + offset)
+        gain.gain.linearRampToValueAtTime(0.9, now + offset + 0.01)
+        gain.gain.setValueAtTime(0.9, now + offset + 0.08)
+        gain.gain.linearRampToValueAtTime(0.001, now + offset + 0.10)
+
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+
+        osc.start(now + offset)
+        osc.stop(now + offset + 0.11)
+      })
+
+      if (navigator.vibrate) {
+        navigator.vibrate([100, 30, 100, 30, 100, 30, 150])
+      }
+    } catch (err) {
+      console.warn('Alarm audio error:', err)
+    }
+  }
+
+  function triggerAlarm() {
+    setTimerAlarming(true)
+    setShowTimer(true)
+
+    // Play first burst immediately
+    playAlarmBurst()
+
+    // Repeat burst every 1.25 seconds
+    if (alarmIntervalRef.current) clearInterval(alarmIntervalRef.current)
+    alarmIntervalRef.current = setInterval(playAlarmBurst, 1250)
+
+    // Safety timeout: auto-stop after 60 seconds if unattended
+    if (alarmTimeoutRef.current) clearTimeout(alarmTimeoutRef.current)
+    alarmTimeoutRef.current = setTimeout(() => {
+      stopAlarm()
+    }, 60000)
+  }
+
+  function stopAlarm() {
+    setTimerAlarming(false)
+    if (alarmIntervalRef.current) {
+      clearInterval(alarmIntervalRef.current)
+      alarmIntervalRef.current = null
+    }
+    if (alarmTimeoutRef.current) {
+      clearTimeout(alarmTimeoutRef.current)
+      alarmTimeoutRef.current = null
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      try {
+        audioCtxRef.current.close()
+      } catch {}
+      audioCtxRef.current = null
+    }
+    if (navigator.vibrate) {
+      try { navigator.vibrate(0) } catch {}
+    }
+  }
+
+  // Cleanup alarm on unmount
+  useEffect(() => {
+    return () => {
+      stopAlarm()
+    }
+  }, [])
+
   // Timer countdown effect
   useEffect(() => {
     if (timerRunning && timerSeconds > 0) {
@@ -85,16 +180,7 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
           if (prev <= 1) {
             clearInterval(timerRef.current)
             setTimerRunning(false)
-            try {
-              if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 300])
-              const ctx = new (window.AudioContext || window.webkitAudioContext)()
-              const osc = ctx.createOscillator()
-              osc.type = 'sine'
-              osc.frequency.setValueAtTime(587.33, ctx.currentTime)
-              osc.connect(ctx.destination)
-              osc.start()
-              osc.stop(ctx.currentTime + 0.6)
-            } catch {}
+            triggerAlarm()
             return 0
           }
           return prev - 1
@@ -107,10 +193,12 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
   }, [timerRunning, timerSeconds])
 
   function addMinutes(min) {
+    if (timerAlarming) stopAlarm()
     setTimerSeconds(s => s + min * 60)
   }
 
   function resetTimer() {
+    stopAlarm()
     setTimerRunning(false)
     setTimerSeconds(0)
   }
@@ -217,18 +305,28 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
 
           {/* Timer button */}
           <button
-            onClick={() => setShowTimer(v => !v)}
-            className={`px-2 py-1.5 rounded-lg flex items-center gap-1 transition-colors ${
-              timerRunning
+            onClick={() => {
+              if (timerAlarming) stopAlarm()
+              else setShowTimer(v => !v)
+            }}
+            className={`px-2 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer ${
+              timerAlarming
+                ? 'bg-rose-500 text-white font-bold animate-pulse shadow-lg shadow-rose-500/50'
+                : timerRunning
                 ? 'bg-amber-500 text-slate-950 font-bold'
                 : showTimer
                 ? 'bg-slate-700 text-sky-400'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
-            title="טיימר"
+            title={timerAlarming ? 'השתק צלצול' : 'טיימר'}
           >
-            <Clock size={14} />
+            {timerAlarming ? (
+              <BellRing size={14} className="animate-bounce" />
+            ) : (
+              <Clock size={14} />
+            )}
             {timerSeconds > 0 && <span className="font-mono text-[11px]">{formatTime(timerSeconds)}</span>}
+            {timerAlarming && <span className="font-mono text-[11px]">00:00!</span>}
           </button>
 
           {/* Original Photo button */}
@@ -245,34 +343,68 @@ export default function CookingModeModal({ recipe, scaledIngredients = [], onClo
         </div>
       </header>
 
+      {/* ── ACTIVE ALARM FULL BANNER ──────────────────────────── */}
+      {timerAlarming && (
+        <div className="bg-rose-600 text-white px-4 py-3 flex items-center justify-between gap-3 shadow-2xl z-30 flex-shrink-0 animate-pulse border-b border-rose-700">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 bg-rose-700/90 rounded-2xl flex-shrink-0 shadow-inner">
+              <BellRing size={24} className="animate-bounce text-white" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-base sm:text-lg leading-tight truncate">⏰ הזמן נגמר!</div>
+              <div className="text-xs text-rose-100 truncate">הטיימר סיים את הספירה לאחור</div>
+            </div>
+          </div>
+          <button
+            onClick={stopAlarm}
+            className="px-4 sm:px-6 py-2.5 bg-white text-rose-700 hover:bg-rose-50 font-bold text-sm sm:text-base rounded-2xl shadow-xl active:scale-95 transition-all cursor-pointer flex items-center gap-2 flex-shrink-0"
+          >
+            <VolumeX size={18} />
+            <span>השתק צלצול</span>
+          </button>
+        </div>
+      )}
+
       {/* ── EMBEDDED TIMER PANEL ──────────────────────────────── */}
       {showTimer && (
-        <div className="bg-slate-900/95 border-b border-slate-800 p-3 px-4 flex flex-wrap items-center justify-between gap-3 animate-fadeIn flex-shrink-0 z-10">
+        <div className={`bg-slate-900/95 border-b border-slate-800 p-3 px-4 flex flex-wrap items-center justify-between gap-3 animate-fadeIn flex-shrink-0 z-10 ${
+          timerAlarming ? 'bg-rose-950/40 border-rose-800/60' : ''
+        }`}>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-2xl font-bold text-amber-400">{formatTime(timerSeconds)}</span>
+            <span className={`font-mono text-2xl font-bold ${timerAlarming ? 'text-rose-400 animate-pulse' : 'text-amber-400'}`}>
+              {timerAlarming ? '00:00' : formatTime(timerSeconds)}
+            </span>
             <div className="flex gap-1.5">
-              <button onClick={() => addMinutes(1)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold">+1 דק׳</button>
-              <button onClick={() => addMinutes(5)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold">+5 דק׳</button>
-              <button onClick={() => addMinutes(10)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold">+10 דק׳</button>
+              <button onClick={() => addMinutes(1)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold cursor-pointer">+1 דק׳</button>
+              <button onClick={() => addMinutes(5)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold cursor-pointer">+5 דק׳</button>
+              <button onClick={() => addMinutes(10)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-semibold cursor-pointer">+10 דק׳</button>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {timerSeconds > 0 && (
+            {timerAlarming ? (
+              <button
+                onClick={stopAlarm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer"
+              >
+                <VolumeX size={16} />
+                <span>השתק</span>
+              </button>
+            ) : timerSeconds > 0 ? (
               <>
                 <button
                   onClick={() => setTimerRunning(r => !r)}
-                  className="p-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition-colors font-bold"
+                  className="p-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition-colors font-bold cursor-pointer"
                 >
                   {timerRunning ? <Pause size={16} /> : <Play size={16} />}
                 </button>
                 <button
                   onClick={resetTimer}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-colors"
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl transition-colors cursor-pointer"
                 >
                   <RotateCcw size={16} />
                 </button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       )}
