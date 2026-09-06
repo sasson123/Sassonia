@@ -245,9 +245,55 @@ def fetch_url(url: str) -> str:
             return raw.decode("utf-8", errors="replace")
 
 
+# ---------- Two-pass OCR prompts for image extraction ----------
+
+OCR_PASS1_PROMPT = """You are a precise OCR engine.
+Your ONLY task: transcribe every piece of text visible in this image, word for word, exactly as it appears.
+
+Rules:
+- Output the raw text line by line, preserving the original layout as closely as possible.
+- Do NOT paraphrase, translate, summarize, or interpret anything.
+- Do NOT add any words, punctuation, or structure that is not in the image.
+- If some text is unclear or partially cut off, write it as best you can and mark it with [?].
+- Output ONLY the transcribed text — no explanations, no commentary, no JSON."""
+
+OCR_PASS2_PROMPT = """You are a recipe parser. Below is raw text that was transcribed verbatim from a recipe image using OCR.
+Your task: parse this raw text into a structured JSON recipe object.
+
+Rules:
+- Use ONLY information found in the raw text below. Do NOT add ingredients, steps, or details not present in the text.
+- Preserve the exact wording of ingredient names and quantities as they appear in the text.
+- If a field (e.g. prep_time, servings) is not mentioned in the text, use 0 or a sensible default.
+- If the text is in Hebrew, output all text fields in Hebrew. If in English, output in English.
+- category must be ONE of: עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר
+- difficulty must be ONE of: easy / medium / hard
+
+Return ONLY a JSON object matching this schema — no markdown, no backticks, no explanation:
+{
+  "name": "Recipe title as it appears in the text",
+  "category": "עיקרית",
+  "prep_time": 0,
+  "cook_time": 0,
+  "servings": 4,
+  "difficulty": "easy",
+  "description": "Only if a description/intro appears in the text, else empty string",
+  "ingredients": [
+    {"name": "ingredient name as in text", "quantity": "exact quantity as in text"}
+  ],
+  "steps": [
+    "Step 1 exactly as in text",
+    "Step 2 exactly as in text"
+  ]
+}
+If the text does not contain any recipe, return: {"error": "No recipe found in image"}
+
+--- RAW OCR TEXT BELOW ---
+"""
+
+
 @router.post("/extract-recipe")
 async def extract_recipe_from_image(file: UploadFile = File(...)):
-    """Extracts a recipe from an uploaded photo or screenshot."""
+    """Two-pass OCR: Pass 1 transcribes raw text, Pass 2 parses it into structured recipe JSON."""
     contents = await file.read()
     if not contents:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
@@ -257,17 +303,36 @@ async def extract_recipe_from_image(file: UploadFile = File(...)):
         mime_type = "image/jpeg"
 
     b64_data = base64.b64encode(contents).decode("utf-8")
-    parts = [
-        {"text": RECIPE_PROMPT},
+
+    # ── Pass 1: Raw OCR — transcribe every visible character, no interpretation ──
+    pass1_parts = [
+        {"text": OCR_PASS1_PROMPT},
         {"inline_data": {"mime_type": mime_type, "data": b64_data}},
     ]
+    raw_text = call_gemini_generate(
+        pass1_parts,
+        timeout=40,
+        temperature=0.0,   # fully deterministic OCR
+        response_json=False,  # plain text, not JSON
+    )
+    logger.info("OCR Pass-1 raw text (%d chars): %s", len(raw_text), raw_text[:200])
 
-    raw_response = call_gemini_generate(parts, timeout=40)
+    if not raw_text.strip():
+        raise HTTPException(status_code=422, detail="No text could be extracted from the image")
+
+    # ── Pass 2: Structure — parse the raw OCR text into recipe JSON ──
+    pass2_parts = [{"text": OCR_PASS2_PROMPT + raw_text}]
+    raw_response = call_gemini_generate(
+        pass2_parts,
+        timeout=35,
+        temperature=0.1,
+        response_json=True,
+    )
 
     try:
         data = parse_json_response(raw_response)
     except Exception as e:
-        logger.error("Could not parse Gemini JSON: %s\nRaw was: %s", str(e), raw_response[:300])
+        logger.error("Could not parse Gemini JSON (Pass 2): %s\nRaw was: %s", str(e), raw_response[:300])
         raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     if "error" in data:
