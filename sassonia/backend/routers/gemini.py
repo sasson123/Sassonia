@@ -8,8 +8,12 @@ import logging
 import traceback
 import urllib.request
 import urllib.error
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
+
+from database import get_db
+import models
 
 logger = logging.getLogger(__name__)
 
@@ -518,3 +522,124 @@ async def suggest_recipes(request: IngredientsRequest):
         raise HTTPException(status_code=422, detail=f"Could not parse Gemini response: {str(e)}")
 
     return data
+
+
+# ── What to Cook (Smart AI + Local Pantry Matching) ───────────────
+
+WHAT_TO_COOK_PROMPT = """אתה שף מומחה. למשתמש יש בבית כרגע את המצרכים הבאים: {ingredients}.
+
+משימתך: להציע 1 או 2 מתכונים אמיתיים ומוכרים בלבד מהקלאסיקות המוכרות של המטבח הישראלי או העולמי (כגון שקשוקה, פריטטה, סלט יווני עשיר, פסטה ברוטב עגבניות ושום, מוקפץ ירקות וטופו/עוף, פשטידה, מרק עגבניות עשיר וכו') שניתן להכין בעיקר מהמצרכים האלה, בתוספת מצרכי יסוד בסיסיים שיש בכל מטבח (שמן, מלח, פלפל, מים, שום או קמח).
+
+כללים קריטיים:
+1. מתכונים אמיתיים בלבד: אסור להמציא מנות פיקטיביות, מנות מוזרות או שילובים לא טבעיים. אך ורק מנות אמיתיות וטעימות שאנשים מבשלים באמת.
+2. דיוק: ציין זמני הכנה, כמויות מדויקות והוראות הכנה ברורות צעד-אחר-צעד.
+3. שפה: עברית טבעית, חמה וקולחת.
+4. הפרדה: ציין בבירור אילו מצרכים קיימים ברשות המשתמש (matching_ingredients) ואילו מצרכים בסיסיים נוספים נדרשים (missing_ingredients).
+5. בטיחות JSON: פלוט אך ורק JSON תקני ללא מרכאות כפולות לא מוברחות בתוך מחרוזות. לקיצורים בעברית השתמש בגרשיים (תפו״א, ק״ג) או במילים מלאות. ללא פסיקים עודפים.
+
+החזר אך ורק אובייקט JSON במבנה הבא (ללא backticks, ללא markdown, ללא שום הסבר):
+{{
+  "recipes": [
+    {{
+      "name": "שם מוכר ואמיתי של המנה",
+      "category": "עיקרית / קינוח / סלט / מרק / ארוחת בוקר / מאפה / נשנוש / אחר",
+      "prep_time": 15,
+      "cook_time": 20,
+      "servings": 4,
+      "difficulty": "easy",
+      "description": "תיאור קצר ומעורר תיאבון המסביר מדוע המנה מתאימה למצרכים שברשות המשתמש",
+      "matching_ingredients": ["עגבניות", "ביצים"],
+      "missing_ingredients": ["שום", "שמן זית"],
+      "ingredients": [
+        {{"name": "עגבניות", "quantity": "4 יחידות"}},
+        {{"name": "ביצים", "quantity": "4"}},
+        {{"name": "שום", "quantity": "2 שיניים"}},
+        {{"name": "שמן זית", "quantity": "2 כפות"}}
+      ],
+      "steps": [
+        "מחממים שמן זית במחבת ומטגנים שום קצוץ כדקה עד להזהבה קלה.",
+        "קוצצים את העגבניות, מוסיפים למחבת ומבשלים כ-10 דקות עד שמתקבל רוטב עשיר.",
+        "יוצרים שקעים ברוטב ושוברים פנימה את הביצים.",
+        "מבשלים מכוסה 5-7 דקות עד שהחלבון יציב והחלמון נשאר רך."
+      ]
+    }}
+  ]
+}}
+"""
+
+
+class WhatToCookRequest(BaseModel):
+    ingredients: list[str]
+
+
+@router.post("/what-to-cook")
+async def what_to_cook(request: WhatToCookRequest, db: Session = Depends(get_db)):
+    """Finds matching recipes from user's personal cookbook and suggests 1-2 real authentic AI recipes."""
+    clean_user_ings = [i.strip().lower() for i in request.ingredients if i.strip()]
+    if not clean_user_ings:
+        raise HTTPException(status_code=400, detail="No ingredients provided")
+
+    # 1. Search local saved recipes in SQLite
+    local_recipes = []
+    try:
+        all_recipes = db.query(models.Recipe).all()
+        for r in all_recipes:
+            try:
+                recipe_ings = json.loads(r.ingredients or "[]")
+            except Exception:
+                recipe_ings = []
+            if not recipe_ings:
+                continue
+
+            matched = []
+            missing = []
+            for item in recipe_ings:
+                ing_name = item.get("name", "").strip()
+                if not ing_name:
+                    continue
+                ing_lower = ing_name.lower()
+                is_match = any(u in ing_lower or ing_lower in u for u in clean_user_ings)
+                if is_match:
+                    matched.append(ing_name)
+                else:
+                    missing.append(ing_name)
+
+            total = len(recipe_ings)
+            if total > 0 and len(matched) > 0:
+                match_percent = int((len(matched) / total) * 100)
+                local_recipes.append({
+                    "id": r.id,
+                    "name": r.name,
+                    "category": r.category,
+                    "prep_time": r.prep_time,
+                    "cook_time": r.cook_time,
+                    "servings": r.servings,
+                    "difficulty": r.difficulty,
+                    "description": r.description,
+                    "image_path": r.image_path,
+                    "matched_ingredients": matched,
+                    "missing_ingredients": missing,
+                    "match_count": len(matched),
+                    "total_ingredients": total,
+                    "match_percent": match_percent,
+                })
+
+        local_recipes.sort(key=lambda x: (x["match_percent"], x["match_count"]), reverse=True)
+    except Exception as e:
+        logger.warning("Local recipe search failed in what_to_cook: %s", str(e))
+
+    # 2. Query Gemini for authentic real recipes
+    ai_recipes = []
+    prompt = WHAT_TO_COOK_PROMPT.format(ingredients=", ".join(clean_user_ings))
+    try:
+        raw_response = call_gemini_generate([{"text": prompt}], timeout=30)
+        parsed = parse_json_response(raw_response)
+        ai_recipes = parsed.get("recipes", [])
+    except Exception as e:
+        logger.warning("Gemini what-to-cook suggestion failed: %s", str(e))
+
+    return {
+        "local_recipes": local_recipes[:8],
+        "ai_recipes": ai_recipes[:2],
+    }
+

@@ -62,6 +62,9 @@ export const gemini = {
 
   suggestRecipes: (ingredients) =>
     api.post('/gemini/suggest-recipes', { ingredients }).then(r => r.data),
+
+  whatToCook: (ingredients) =>
+    api.post('/gemini/what-to-cook', { ingredients }).then(r => r.data),
 }
 
 export const system = {

@@ -5,6 +5,7 @@ import {
   Link as LinkIcon, PenTool, X, Sparkles, ExternalLink
 } from 'lucide-react'
 import { recipes as recipesApi, gemini } from '../api'
+import WhatToCookModal from './WhatToCookModal'
 
 const CATEGORIES = ['הכל', 'עיקרית', 'קינוח', 'סלט', 'מרק', 'ארוחת בוקר', 'מאפה', 'נשנוש', 'אחר']
 const DIFFICULTY_COLOR = {
@@ -19,6 +20,7 @@ export default function RecipesPage() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('הכל')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showWhatToCook, setShowWhatToCook] = useState(false)
 
   // URL import state
   const [urlInput, setUrlInput] = useState('')
@@ -80,12 +82,21 @@ export default function RecipesPage() {
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <ChefHat className="text-sky-400" size={28} /> ספר מתכונים
           </h1>
-          <button
-            onClick={() => { setShowAddModal(true); setError('') }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-sm font-bold text-white transition-colors shadow-md active:scale-95"
-          >
-            <Plus size={18} /> הוסף מתכון
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowWhatToCook(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 rounded-xl text-xs sm:text-sm font-bold text-slate-950 transition-all shadow-md active:scale-95"
+              title="הצעות מתכונים לפי מה שיש במקרר"
+            >
+              <Sparkles size={16} /> מה נבשל?
+            </button>
+            <button
+              onClick={() => { setShowAddModal(true); setError('') }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 rounded-xl text-xs sm:text-sm font-bold text-white transition-colors shadow-md active:scale-95"
+            >
+              <Plus size={18} /> הוסף מתכון
+            </button>
+          </div>
         </div>
 
         {/* Search Input */}
@@ -247,6 +258,12 @@ export default function RecipesPage() {
           </div>
         </div>
       )}
+
+      {/* What to Cook Modal */}
+      <WhatToCookModal
+        isOpen={showWhatToCook}
+        onClose={() => setShowWhatToCook(false)}
+      />
     </div>
   )
 }
