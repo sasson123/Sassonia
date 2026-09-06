@@ -317,40 +317,47 @@ export default function RecipeFormPage() {
             </div>
           )}
 
-          {/* Column headers for wide clear layout */}
-          <div className="flex gap-2 text-xs font-semibold text-slate-400 px-1 mb-1.5">
-            <span className="flex-1 text-right">שם המצרך</span>
-            <span className="w-28 sm:w-36 text-center">כמות</span>
-            <span className="w-8"></span>
-          </div>
-
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {form.ingredients.map((ing, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                {/* In RTL: Name on right */}
-                <input
-                  value={ing.name}
-                  onChange={e => setIngredient(i, 'name', e.target.value)}
-                  placeholder="שם המצרך (קמח)"
-                  dir={isHebrew ? 'rtl' : 'ltr'}
-                  className="input-field flex-1 min-w-0 text-sm font-medium text-right"
-                />
-                {/* In RTL: Quantity on left of name */}
-                <input
-                  value={ing.quantity}
-                  onChange={e => setIngredient(i, 'quantity', e.target.value)}
-                  placeholder="כמות (2 כוסות)"
-                  dir={isHebrew ? 'rtl' : 'ltr'}
-                  className="input-field w-28 sm:w-36 text-sm text-center font-medium flex-shrink-0"
-                />
-                <button
-                  type="button"
-                  onClick={() => setField('ingredients', form.ingredients.filter((_, j) => j !== i))}
-                  className="text-slate-500 hover:text-red-400 p-2 transition-colors flex-shrink-0"
-                  title="מחק מצרך"
-                >
-                  <Trash2 size={16} />
-                </button>
+              <div
+                key={i}
+                className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-2.5 sm:p-3 transition-all focus-within:border-sky-500/70 focus-within:bg-slate-800/90 shadow-sm"
+              >
+                {/* Line 1: Number + Full-width ingredient name + Delete button */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-slate-500 w-5 flex-shrink-0 text-center">
+                    {i + 1}
+                  </span>
+                  <input
+                    value={ing.name}
+                    onChange={e => setIngredient(i, 'name', e.target.value)}
+                    placeholder="שם המצרך (למשל: קמח כוסמין מלא)"
+                    dir={isHebrew ? 'rtl' : 'ltr'}
+                    className="bg-slate-900/90 border border-slate-700/70 rounded-xl px-3 py-2 text-sm font-medium text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 flex-1 min-w-0 text-right"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setField('ingredients', form.ingredients.filter((_, j) => j !== i))}
+                    className="text-slate-500 hover:text-red-400 p-2 transition-colors rounded-lg hover:bg-slate-700/50 flex-shrink-0"
+                    title="מחק מצרך"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                {/* Line 2: Quantity field */}
+                <div className="flex items-center gap-2 pr-7">
+                  <span className="text-xs font-semibold text-slate-400 flex-shrink-0">
+                    כמות:
+                  </span>
+                  <input
+                    value={ing.quantity}
+                    onChange={e => setIngredient(i, 'quantity', e.target.value)}
+                    placeholder="למשל: 2 כוסות / 250 גרם (אופציונלי)"
+                    dir={isHebrew ? 'rtl' : 'ltr'}
+                    className="bg-slate-900/60 border border-slate-700/50 rounded-xl px-3 py-1.5 text-xs font-medium text-sky-300 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 flex-1 text-right"
+                  />
+                </div>
               </div>
             ))}
           </div>
